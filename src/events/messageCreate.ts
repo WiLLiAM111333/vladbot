@@ -19,8 +19,6 @@ export default class extends Event<'messageCreate'> {
       ? message.content.slice(prefix.length).split(/ +/)
       : message.content.split(/ +/);
 
-    console.log(args);
-
     const command = args.shift()?.toLowerCase();
 
     if(hasPrefix && command && client.commandHandler.hasCommand(command)) {

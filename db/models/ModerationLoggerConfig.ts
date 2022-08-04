@@ -7,10 +7,10 @@ export const ModerationLoggerConfig = model('moderationlogger_config', new Schem
   },
   logChannelID: {
     type: String,
-    required: true
+    required: false
   },
-  modRoleIDs: {
-    type: Array,
-    required: true
+  modRoleID: {
+    type: String,
+    required: false
   }
 }));

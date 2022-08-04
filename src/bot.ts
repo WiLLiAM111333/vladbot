@@ -15,4 +15,4 @@ const client = new VladimirClient({
   ]
 });
 
-client.login(process.env.TOKEN);
+client.login(process.env.TOKEN_DEV);

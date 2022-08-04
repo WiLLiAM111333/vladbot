@@ -7,7 +7,8 @@ import { ResolvedChannelTypeUnion } from './ResolvedChannelTypeUnion';
 import { ModerationLoggerConfigManager } from './config/ModerationLoggerConfigManager';
 import { DiscordFormatter } from '../formatter/DiscordFormatter';
 import { ByteConverter } from '../converter/ByteConverter';
-import { Stream } from 'stream';
+import { IModerationLoggerLogOptions } from './IModerationLoggerLogOptions';
+import { IModerationLoggerConfig } from './config/IModerationLoggerConfig';
 import {
   Snowflake,
   GuildChannel,
@@ -27,12 +28,7 @@ import {
   ChannelType,
   OverwriteType,
   GuildMember,
-  BufferResolvable,
-  JSONEncodable,
-  APIAttachment,
-  Attachment,
-  AttachmentBuilder,
-  AttachmentPayload
+  roleMention
 } from 'discord.js';
 
 const { discordSupportedMedias, Environments } = Constants;
@@ -197,20 +193,34 @@ export class ModerationLogger {
    * @private
    * @async
    * @param {Snowflake} guildID
-   * @param {LogEmbed} embed
+   * @param {IModerationLoggerLogOptions} options
+   * @param {?IModerationLoggerConfig} cfg
+   * @returns {Promise<void>}
    */
-  private async log(guildID: Snowflake, embed: LogEmbed | Array<LogEmbed>, files?: Array<BufferResolvable | Stream | JSONEncodable<APIAttachment> | Attachment | AttachmentBuilder | AttachmentPayload>): Promise<void> {
+  private async log(guildID: Snowflake, options: IModerationLoggerLogOptions, cfg?: IModerationLoggerConfig): Promise<void> {
     try {
+      const { embeds, files, pingModRole } = options;
       const hook = await this.getWebHook(guildID);
 
       if(!hook) {
         return;
       }
 
-      if(Array.isArray(embed)) {
-        hook.send({ embeds: [ ...embed ], files: files ? files : [] });
+      if(pingModRole) {
+        if(!cfg) {
+          throw new Error('No CFG in log function but pingModRole is true');
+        }
+
+        const { modRoleID } = cfg;
+
+        hook.send({
+          embeds,
+          files,
+          allowedMentions: { roles: [ cfg.modRoleID ] },
+          content: roleMention(modRoleID)
+        });
       } else {
-        hook.send({ embeds: [ embed ], files: files ? files : [] });
+        hook.send({ embeds, files });
       }
     } catch (err) {
       throw err;
@@ -222,11 +232,12 @@ export class ModerationLogger {
    * @private
    * @async
    * @param {Snowflake} guildID
+   * @param {?IModerationLoggerConfig} config
    * @returns {Promise<Webhook>}
    */
-  private async getWebHook(guildID: Snowflake): Promise<Webhook> {
+  private async getWebHook(guildID: Snowflake, config?: IModerationLoggerConfig): Promise<Webhook> {
     try {
-      const cfg = await this.configManager.get(guildID);
+      const cfg = config ?? await this.configManager.get(guildID);
 
       if(!cfg?.logChannelID) {
         return;
@@ -291,7 +302,7 @@ export class ModerationLogger {
         .setAuthor({ name: authorStr, iconURL: this.getAvatarFromAuditLog(auditLogEntry) })
         .setDescription(descriptionStr);
 
-      this.log(guildId, embed);
+      this.log(guildId, { embeds: [ embed ] });
 
       this.assignAuditLogEntry(guildId, auditLogEntry);
     } catch (err) {
@@ -327,7 +338,7 @@ export class ModerationLogger {
       const embed = new LogEmbed(1)
         .setAuthor({ name: authorStr, iconURL: this.getAvatarFromAuditLog(auditLogEntry) });
 
-      this.log(guildId, embed)
+      this.log(guildId, { embeds: [ embed ] });
 
       this.assignAuditLogEntry(guildId, auditLogEntry);
     } catch (err) {
@@ -503,7 +514,7 @@ export class ModerationLogger {
         .setAuthor({ name: authorStr, iconURL: this.getAvatarFromAuditLog(auditLogEntry) })
         .setDescription(diff.join(`\n`));
 
-      this.log(guildId, embed);
+      this.log(guildId, { embeds: [ embed ] });
 
       this.assignAuditLogEntry(guildId, auditLogEntry);
     } catch (err) {
@@ -539,7 +550,7 @@ export class ModerationLogger {
         .setImage(url)
         .setDescription(description);
 
-      this.log(guildID, embed);
+      this.log(guildID, { embeds: [ embed ] });
 
       this.assignAuditLogEntry(guildID, auditLogEntry);
     } catch(err) {
@@ -569,7 +580,7 @@ export class ModerationLogger {
         .setAuthor({ name: authorStr, iconURL: this.getAvatarFromAuditLog(auditLogEntry) })
         .setImage(url);
 
-      this.log(guildID, embed);
+      this.log(guildID, { embeds: [ embed ] });
 
       this.assignAuditLogEntry(guildID, auditLogEntry);
     } catch(err) {
@@ -577,7 +588,7 @@ export class ModerationLogger {
         const embed = new LogEmbed(2)
           .setDescription('An emote was deleted but I was unable to retrieve any information about it!');
 
-        this.log(guildID, embed);
+        this.log(guildID, { embeds: [ embed ] });
       } else {
         this.handleError(err);
       }
@@ -610,7 +621,7 @@ export class ModerationLogger {
           .setAuthor({ name: authorStr, iconURL: this.getAvatarFromAuditLog(auditLogEntry) })
           .setImage(newEmote.url);
 
-        this.log(guildID, embed);
+        this.log(guildID, { embeds: [ embed ] });
 
         this.assignAuditLogEntry(guildID, auditLogEntry);
       }
@@ -642,7 +653,7 @@ export class ModerationLogger {
       const embed = new LogEmbed(2)
         .setAuthor({ name: authorStr })
 
-      this.log(guildID, embed);
+      this.log(guildID, { embeds: [ embed ] });
 
       this.assignAuditLogEntry(guildID, auditLogEntry);
     } catch (err) {
@@ -672,7 +683,7 @@ export class ModerationLogger {
         .setAuthor({ name: authorStr, iconURL: this.getAvatarFromAuditLog(auditLogEntry) })
         .setDescription(`They were originally banned for the following reason:\n${bold(`"${reason ?? auditLogEntry?.reason ?? 'No Reason Set'}"`)}`);
 
-      this.log(guildID, embed);
+      this.log(guildID, { embeds: [ embed ] });
 
       this.assignAuditLogEntry(guildID, auditLogEntry);
     } catch (err) {
@@ -713,7 +724,7 @@ export class ModerationLogger {
         .setAuthor({ name: authorStr, iconURL: this.getAvatarFromAuditLog(auditLogEntry) })
         .setDescription(descriptionStr);
 
-      this.log(guildID, embed);
+      this.log(guildID, { embeds: [ embed ] });
 
       this.assignAuditLogEntry(guildID, auditLogEntry);
     } catch (err) {
@@ -748,7 +759,7 @@ export class ModerationLogger {
           ${bold('ID')}: ${inlineCodeBlock(id)}
         `));
 
-      this.log(guildID, embed);
+      this.log(guildID, { embeds: [ embed ] });
 
       this.assignAuditLogEntry(guildID, auditLogEntry);
     } catch (err) {
@@ -832,7 +843,7 @@ export class ModerationLogger {
           .join('\n')
         );
 
-      this.log(guildID, embed);
+      this.log(guildID, { embeds: [ embed ] });
 
       this.assignAuditLogEntry(guildID, auditLogEntry);
     } catch (err) {
@@ -867,7 +878,7 @@ export class ModerationLogger {
           ${bold('Description')}: ${inlineCodeBlock(description)}
         `));
 
-      this.log(guildId, embed);
+      this.log(guildId, { embeds: [ embed ] });
 
       this.assignAuditLogEntry(guildId, auditLogEntry);
     } catch(err) {
@@ -913,7 +924,7 @@ export class ModerationLogger {
           .join('\n')
         );
 
-      this.log(guildId, embed);
+      this.log(guildId, { embeds: [ embed ] });
 
       this.assignAuditLogEntry(guildId, auditLogEntry);
     } catch(err) {
@@ -943,7 +954,7 @@ export class ModerationLogger {
           ${bold('Description')}: ${inlineCodeBlock(description)}
         `));
 
-      this.log(guildId, embed);
+      this.log(guildId, { embeds: [ embed ] });
 
       this.assignAuditLogEntry(guildId, auditLogEntry);
     } catch (err) {
@@ -961,15 +972,44 @@ export class ModerationLogger {
   public handleMessageDelete(message: Message): void {
     this.configManager.get(message.guildId).then(cfg => {
       // idk how it wouldnt be a textchannel but hey ho lets keep it
-      if(message.channel.id === cfg.logChannelID || !(message.channel instanceof TextChannel) || !message.guild) return;
+      if((cfg && message.channel.id === cfg.logChannelID) || !(message.channel instanceof TextChannel) || !message.guild) return;
 
       const embed = new LogEmbed(0)
         .setAuthor({ name: `Deleted message from ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
         .setDescription(`${bold('Channel')}: ${inlineCodeBlock(message.channel.name)}`)
-        .addFields({ name: 'Content', value: message.content || 'NO_CONTENT', inline: false });
 
-      this.log(message.guildId, embed);
-    }).catch(this.handleError);
+      const hasMentions = !!(
+        message.mentions.users.size
+          + message.mentions.members.size
+          + message.mentions.roles.size
+      );
+
+      const isMessageReply = !!message.mentions.repliedUser
+
+      if(hasMentions) {
+        const currUTCTime = new Date(Date.now());
+        const timeDiff = (((currUTCTime.getTime() - message.createdAt.getTime()) / 1000) / 60).toFixed(2);
+
+        embed.setDescription(stripIndent(`
+          ${bold('Potential Ghost Ping')}
+          ${bold('Time Between')}: ${inlineCodeBlock(timeDiff)} minutes
+          ${bold('Channel')}: ${inlineCodeBlock(message.channel.name)}
+          ${bold('Content')}:
+          ${message.content ?? 'NO_CONTENT'}
+        `));
+      } else {
+        embed.setDescription(stripIndent(`
+          ${bold('Channel')}: ${inlineCodeBlock(message.channel.name)}
+          ${bold('Content')}:\n\n${message.content ?? 'NO_CONTENT'}
+        `));
+      }
+
+      if(isMessageReply) {
+        embed.setFooter({ text: 'This mention was a message reply' });
+      }
+
+      this.log(message.guildId, { embeds: [ embed ], pingModRole: true }, cfg);
+    }).catch(err => this.handleError(err));
   }
 
   /**
@@ -994,7 +1034,10 @@ export class ModerationLogger {
         }
 
         for(const [ attachmentID, attachment ] of message.attachments) {
-          const [ name, extension ] = attachment.name.split('.');
+          const splitName = attachment.name.split('.');
+          const extension = splitName.pop();
+          const name = splitName.join('.');
+
           const isSupportedMedia = discordSupportedMedias.includes(extension);
 
           if(isSupportedMedia) {
@@ -1022,7 +1065,6 @@ export class ModerationLogger {
           .setDescription(stripIndent(`
             ${bold('Author')}: ${inlineCodeBlock(message.author.tag)}
             ${bold('Content')}:
-
             ${message.content || 'NO_CONTENT'}
           `))
           .setFooter({ text: 'Potentially malicious files are listed below in embeds if present' })
@@ -1031,7 +1073,7 @@ export class ModerationLogger {
           embed.setImage(`attachment://${firstAttachment.name}`);
         }
 
-        this.log(message.guildId, [ embed, ...messageObject.embeds ], messageObject.files);
+        this.log(message.guildId, { embeds: [ embed, ...messageObject.embeds ], files: messageObject.files });
       }
     } catch (err) {
       this.handleError(err);
@@ -1057,7 +1099,7 @@ export class ModerationLogger {
           .setAuthor({ name: `${member.user.tag} was just kicked by ${auditLogEntry.executor.tag}` })
           .setDescription(`${bold('Reason')}\n${codeBlock(auditLogEntry.reason)}`);
 
-        this.log(guildID, embed);
+        this.log(guildID, { embeds: [ embed ] });
       }
     } catch (err) {
       this.handleError(err);
@@ -1086,7 +1128,7 @@ export class ModerationLogger {
           .setAuthor({ name: `${oldMember.user.tag} was timed out by ${auditLogEntry.executor} until ${auditLogEntry} for the reason:` })
           .setDescription(auditLogEntry.reason ?? 'NO_REASON_PROVIDED');
 
-        this.log(guildID, embed);
+        this.log(guildID, { embeds: [ embed ] });
       }
     } catch (err) {
       this.handleError(err);

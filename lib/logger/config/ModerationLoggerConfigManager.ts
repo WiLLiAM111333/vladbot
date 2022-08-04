@@ -1,11 +1,12 @@
 import { ModerationLoggerConfig } from '../../../db/models/ModerationLoggerConfig';
 import { IModerationLoggerConfig } from "./IModerationLoggerConfig";
 import { Snowflake } from "discord.js";
+import { FuckYou } from '../../mongo/FuckYou';
 
 export class ModerationLoggerConfigManager {
-  public async add({ guildID, logChannelID, modRoleIDs }: IModerationLoggerConfig): Promise<void> {
+  public async add({ guildID, logChannelID, modRoleID }: Optional<IModerationLoggerConfig>): Promise<void> {
     try {
-      const cfg = new ModerationLoggerConfig({ guildID, logChannelID, modRoleIDs });
+      const cfg = new ModerationLoggerConfig({ guildID, logChannelID, modRoleID });
 
       await cfg.save();
     } catch (err: unknown) {
@@ -40,7 +41,7 @@ export class ModerationLoggerConfigManager {
     }
   }
 
-  public async get(guildID: Snowflake): Promise<IModerationLoggerConfig> {
+  public async get(guildID: Snowflake): Promise<FuckYou<IModerationLoggerConfig>> {
     try {
       return await ModerationLoggerConfig.findOne({ guildID });
     } catch (err: unknown) {

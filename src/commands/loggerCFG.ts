@@ -22,44 +22,21 @@ export default class extends Command {
   public async run(client: VladimirClient, message: Message, args: Array<string>): Promise<unknown> {
     const snowflakeRegex = /\d{10,25}/;
     const guildID = message.guildId
-    const hasCFG = await this.configManger.has(message.guildId);
 
-    const allowedKeys = ['guildID', 'logChannelID', 'modRoleIDs'];
-    const key = args.shift().toLowerCase();
+    const oldCFG = await this.configManger.get(guildID)
 
-    if(!key || !allowedKeys.map(key => key.toLowerCase()).includes(key)) {
+    const allowedKeys = ['guildID', 'logChannelID', 'modRoleID'];
+
+    const rawKey = args.shift().toLowerCase();
+    const key = allowedKeys.find(k => k.toLowerCase() === rawKey);
+
+    if(!key || !allowedKeys.includes(key)) {
       const embed = new EmbedBuilder()
         .setColor('#ff0000')
         .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
         .setDescription(`You need to provide one of the following keys:\n${allowedKeys.join('\n')}`);
 
       return message.channel.send({ embeds: [ embed ] });
-    }
-
-    if(key === 'modRoleIDs') {
-      for(const snowflake of args) {
-        if(!snowflakeRegex.test(snowflake)) {
-          const embed = new EmbedBuilder()
-            .setColor('#ff0000')
-            .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
-            .setDescription('Please provide a valid discord snowflake!');
-
-          return message.channel.send({ embeds: [ embed ] });
-        }
-      }
-
-      if(hasCFG) {
-        return await this.configManger.update({
-          guildID,
-          modRoleIDs: args
-        });
-      }
-
-      return await this.configManger.add({
-        guildID,
-        modRoleIDs: args,
-        logChannelID: undefined
-      });
     }
 
     const value = args.shift();
@@ -73,17 +50,14 @@ export default class extends Command {
       return message.channel.send({ embeds: [ embed ] });
     }
 
-    if(hasCFG) {
-      return await this.configManger.update({
-        guildID,
-        logChannelID: value
-      });
+    if(oldCFG) {
+      oldCFG[key] = value;
+      return await oldCFG.save();
     }
 
     await this.configManger.add({
       guildID,
-      logChannelID: value,
-      modRoleIDs: undefined
+      [key]: value
     });
   }
 }
