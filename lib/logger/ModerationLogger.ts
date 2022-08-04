@@ -28,7 +28,8 @@ import {
   ChannelType,
   OverwriteType,
   GuildMember,
-  roleMention
+  roleMention,
+  channelMention
 } from 'discord.js';
 
 const { discordSupportedMedias, Environments } = Constants;
@@ -1064,6 +1065,7 @@ export class ModerationLogger {
           .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
           .setDescription(stripIndent(`
             ${bold('Author')}: ${inlineCodeBlock(message.author.tag)}
+            ${bold('Channel')}: ${channelMention(message.channel.id)}
             ${bold('Content')}:
             ${message.content || 'NO_CONTENT'}
           `))
