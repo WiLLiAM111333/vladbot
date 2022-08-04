@@ -1045,7 +1045,7 @@ export class ModerationLogger {
             messageObject.embeds.push(
               new LogEmbed(3)
                 .setImage(`attachment://${attachment.name}`)
-                .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
+                .setAuthor({ name: `${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
             )
           } else {
             messageObject.embeds.push(
@@ -1062,7 +1062,7 @@ export class ModerationLogger {
         }
 
         const embed = new LogEmbed(1)
-          .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
+          .setAuthor({ name: `Message from ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
           .setDescription(stripIndent(`
             ${bold('Author')}: ${inlineCodeBlock(message.author.tag)}
             ${bold('Channel')}: ${channelMention(message.channel.id)}
