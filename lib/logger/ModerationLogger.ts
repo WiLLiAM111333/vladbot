@@ -1107,35 +1107,6 @@ export class ModerationLogger {
   }
 
   /**
-   * @description Handles the event guildMemberUpdate
-   * @public
-   * @async
-   * @param {GuildMember} oldMember
-   * @param {GuildMember} newMember
-   */
-  public async handleGuildMemberUpdate(oldMember: GuildMember, newMember: GuildMember): Promise<void> {
-    try {
-      const guildID = oldMember.guild.id;
-
-      const wasTimedOut = this.isTimedOut(oldMember);
-      const isNowTimedOut = this.isTimedOut(newMember);
-
-      const auditLogs = await oldMember.guild.fetchAuditLogs({ type: AuditLogEvent.MemberUpdate });
-      const auditLogEntry = auditLogs.entries.find(log => log.id !== this.getLastAuditLogID(guildID));
-
-      if(!wasTimedOut && isNowTimedOut) {
-        const embed = new LogEmbed(1)
-          .setAuthor({ name: `${oldMember.user.tag} was timed out by ${auditLogEntry.executor} until ${auditLogEntry} for the reason:` })
-          .setDescription(auditLogEntry.reason ?? 'NO_REASON_PROVIDED');
-
-        this.log(guildID, { embeds: [ embed ] });
-      }
-    } catch (err) {
-      this.handleError(err);
-    }
-  }
-
-  /**
    * @description Handles errors throughout the logger.
    * @private
    * @param {Error} err
