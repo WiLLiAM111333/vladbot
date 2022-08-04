@@ -1009,7 +1009,7 @@ export class ModerationLogger {
         embed.setFooter({ text: 'This mention was a message reply' });
       }
 
-      this.log(message.guildId, { embeds: [ embed ], pingModRole: true }, cfg);
+      this.log(message.guildId, { embeds: [ embed ], pingModRole: hasMentions }, cfg);
     }).catch(err => this.handleError(err));
   }
 
