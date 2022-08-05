@@ -20,12 +20,13 @@ export default class extends Command {
   }
 
   public async run(client: VladimirClient, message: Message, args: Array<string>): Promise<unknown> {
+    let value: string | Array<string>;
+
     const snowflakeRegex = /\d{10,25}/;
     const guildID = message.guildId
 
     const oldCFG = await this.configManger.get(guildID)
-
-    const allowedKeys = ['guildID', 'logChannelID', 'modRoleID'];
+    const allowedKeys = ['guildID', 'logChannelID', 'modRoleID', 'ignoredChannelIDs'];
 
     const rawKey = args.shift().toLowerCase();
     const key = allowedKeys.find(k => k.toLowerCase() === rawKey);
@@ -39,15 +40,30 @@ export default class extends Command {
       return message.channel.send({ embeds: [ embed ] });
     }
 
-    const value = args.shift();
+    if(key === 'ignoredChannelIDs') {
+      for(const snowflake of args) {
+        if(!snowflakeRegex.test(snowflake)) {
+          const embed = new EmbedBuilder()
+            .setColor('#ff0000')
+            .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
+            .setDescription('Please provide a valid discord snowflake!');
 
-    if(!snowflakeRegex.test(value)) {
-      const embed = new EmbedBuilder()
-        .setColor('#ff0000')
-        .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
-        .setDescription('Please provide a valid discord snowflake!');
+          return message.channel.send({ embeds: [ embed ] });
+        }
+      }
 
-      return message.channel.send({ embeds: [ embed ] });
+      value = args;
+    } else {
+      value = args.shift();
+
+      if(!snowflakeRegex.test(value)) {
+        const embed = new EmbedBuilder()
+          .setColor('#ff0000')
+          .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
+          .setDescription('Please provide a valid discord snowflake!');
+
+        return message.channel.send({ embeds: [ embed ] });
+      }
     }
 
     if(oldCFG) {

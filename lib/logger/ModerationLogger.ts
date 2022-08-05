@@ -32,7 +32,7 @@ import {
   channelMention
 } from 'discord.js';
 
-const { discordSupportedMedias, Environments } = Constants;
+const { discordSupportedMedias, Environments, MEDIA_SUFFIX_REGEX } = Constants;
 const { bold, cursive, inlineCodeBlock, codeBlock } = DiscordFormatter;
 
 /**
@@ -63,7 +63,18 @@ export class ModerationLogger {
    * @type {boolean}
    */
   private verbose: boolean;
+  /**
+   * @description Cached config for the moderationlogger
+   * @private
+   * @type {IModerationLoggerConfig}
+   */
+  private cachedCFG: IModerationLoggerConfig;
 
+  /**
+   * @public
+   * @constructor
+   * @param {VladimirClient} client
+   */
   public constructor(client: VladimirClient) {
     this.client = client;
     this.auditLogs = new Map<Snowflake, Snowflake>(); // Memory leak needs cleaning up
@@ -177,16 +188,6 @@ export class ModerationLogger {
    */
   private assignAuditLogEntry<TAction extends AuditLogEvent, TActionType extends 'Update' | 'Create' | 'Delete', TTargetType extends GuildAuditLogsTargetType>(guildID: Snowflake, log: GuildAuditLogsEntry<TAction, TActionType, TTargetType>): void {
     this.auditLogs.set(guildID, log?.id ?? this.auditLogs.get(guildID));
-  }
-
-  /**
-   * @description Checks if a member is timed out and converts it to a boolean value
-   * @private
-   * @param {GuildMember} member
-   * @returns {boolean}
-   */
-  private isTimedOut(member: GuildMember): boolean {
-    return !!member.communicationDisabledUntilTimestamp;
   }
 
   /**
@@ -972,8 +973,10 @@ export class ModerationLogger {
    */
   public handleMessageDelete(message: Message): void {
     this.configManager.get(message.guildId).then(cfg => {
+      this.cachedCFG = cfg;
+
       // idk how it wouldnt be a textchannel but hey ho lets keep it
-      if((cfg && message.channel.id === cfg.logChannelID) || !(message.channel instanceof TextChannel) || !message.guild) return;
+      if((cfg && message.channel.id === cfg.logChannelID) || !(message.channel instanceof TextChannel) || cfg.ignoredChannelIDs.includes(message.channelId) || !message.guild) return;
 
       const embed = new LogEmbed(0)
         .setAuthor({ name: `Deleted message from ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
@@ -1022,8 +1025,24 @@ export class ModerationLogger {
    */
   public async handleMessageCreate(message: Message): Promise<void> {
     try {
+      if(!this.cachedCFG) {
+        this.cachedCFG = await this.configManager.get(message.guildId);
+      }
+
+      if(message.author.bot || this.cachedCFG.ignoredChannelIDs.includes(message.channelId)) return;
+
       const hasAttachments = !!(message.attachments.size);
       const messageObject = { embeds: [], files: [] };
+
+      const firstEmbed = new LogEmbed(1)
+        .setAuthor({ name: `Message from ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
+        .setDescription(stripIndent(`
+          ${bold('Author')}: ${inlineCodeBlock(message.author.tag)}
+          ${bold('Channel')}: ${channelMention(message.channel.id)}
+          ${bold('Content')}:
+          ${message.content || 'NO_CONTENT'}
+        `))
+        .setFooter({ text: 'Potentially malicious files are listed below in embeds if present' })
 
       if(hasAttachments) {
         const firstAttachment = message.attachments.first();
@@ -1032,6 +1051,8 @@ export class ModerationLogger {
         if(firstIsSafe) {
           messageObject.files.push(firstAttachment);
           message.attachments.delete(firstAttachment.id);
+
+          firstEmbed.setImage(`attachment://${firstAttachment.name}`);
         }
 
         for(const [ attachmentID, attachment ] of message.attachments) {
@@ -1061,21 +1082,7 @@ export class ModerationLogger {
           }
         }
 
-        const embed = new LogEmbed(1)
-          .setAuthor({ name: `Message from ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
-          .setDescription(stripIndent(`
-            ${bold('Author')}: ${inlineCodeBlock(message.author.tag)}
-            ${bold('Channel')}: ${channelMention(message.channel.id)}
-            ${bold('Content')}:
-            ${message.content || 'NO_CONTENT'}
-          `))
-          .setFooter({ text: 'Potentially malicious files are listed below in embeds if present' })
-
-        if(firstIsSafe) {
-          embed.setImage(`attachment://${firstAttachment.name}`);
-        }
-
-        this.log(message.guildId, { embeds: [ embed, ...messageObject.embeds ], files: messageObject.files });
+        this.log(message.guildId, { embeds: [ firstEmbed, ...messageObject.embeds ], files: messageObject.files });
       }
     } catch (err) {
       this.handleError(err);

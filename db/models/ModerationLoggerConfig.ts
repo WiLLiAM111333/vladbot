@@ -12,5 +12,9 @@ export const ModerationLoggerConfig = model('moderationlogger_config', new Schem
   modRoleID: {
     type: String,
     required: false
+  },
+  ignoredChannelIDs: {
+    type: Array,
+    required: false
   }
 }));
