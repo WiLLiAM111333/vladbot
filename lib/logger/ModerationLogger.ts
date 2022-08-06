@@ -26,7 +26,6 @@ import {
   AuditLogEvent,
   GuildAuditLogsTargetType,
   ChannelType,
-  OverwriteType,
   GuildMember,
   roleMention,
   channelMention,
@@ -996,6 +995,7 @@ export class ModerationLogger {
           message.attachments.delete(firstAttachment.id);
 
           firstEmbed.setImage(`attachment://${firstAttachment.name}`);
+          firstEmbedHasAttachment = true
         }
 
         for(const [ attachmentID, attachment ] of message.attachments) {
