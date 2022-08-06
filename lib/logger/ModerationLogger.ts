@@ -29,7 +29,8 @@ import {
   OverwriteType,
   GuildMember,
   roleMention,
-  channelMention
+  channelMention,
+  userMention
 } from 'discord.js';
 
 const { discordSupportedMedias, Environments, MEDIA_SUFFIX_REGEX } = Constants;
@@ -201,28 +202,31 @@ export class ModerationLogger {
    */
   private async log(guildID: Snowflake, options: IModerationLoggerLogOptions, cfg?: IModerationLoggerConfig): Promise<void> {
     try {
-      const { embeds, files, pingModRole } = options;
-      const hook = await this.getWebHook(guildID);
+      //? Never log if there is no embed, could crash the bot as there is very rarely any extra content sent
+      if(options.embeds) {
+        const { embeds, files, pingModRole } = options;
+        const hook = await this.getWebHook(guildID);
 
-      if(!hook) {
-        return;
-      }
-
-      if(pingModRole) {
-        if(!cfg) {
-          throw new Error('No CFG in log function but pingModRole is true');
+        if(!hook) {
+          return;
         }
 
-        const { modRoleID } = cfg;
+        if(pingModRole) {
+          if(!cfg) {
+            throw new Error('No CFG in log function but pingModRole is true');
+          }
 
-        hook.send({
-          embeds,
-          files,
-          allowedMentions: { roles: [ cfg.modRoleID ] },
-          content: roleMention(modRoleID)
-        });
-      } else {
-        hook.send({ embeds, files });
+          const { modRoleID } = cfg;
+
+          hook.send({
+            embeds,
+            files,
+            allowedMentions: { roles: [ cfg.modRoleID ] },
+            content: roleMention(modRoleID)
+          });
+        } else {
+          hook.send({ embeds, files });
+        }
       }
     } catch (err) {
       throw err;
@@ -373,88 +377,6 @@ export class ModerationLogger {
     try {
       const auditLogs = await newChannel.guild.fetchAuditLogs({ type: AuditLogEvent.ChannelUpdate });
       const auditLogEntry = auditLogs.entries.find(log => log.id !== this.getLastAuditLogID(guildId));
-
-      const oldChPerms = [...oldChannel.permissionOverwrites.cache];
-      const newChPerms = [...newChannel.permissionOverwrites.cache];
-
-      if(oldChPerms.length < newChPerms.length) { // A new override was created.
-        const newOverride = newChPerms[newChPerms.length -1][1];
-
-        if(newOverride.type === OverwriteType.Member) {
-          const { tag } = newChannel.guild.members.resolve(newOverride.id).user;
-
-          diff[diff.length] = `Added an override for ${inlineCodeBlock(tag)}`;
-        } else {
-          const { name } = newChannel.guild.roles.resolve(newOverride.id);
-
-          diff[diff.length] = `Added an override for ${inlineCodeBlock(name)}`;
-        }
-      } else if(oldChPerms.length > newChPerms.length) { // A permission override was removed.
-        const removedOverride = oldChPerms.reduce((_, override) => {
-          if(!newChPerms.includes(override)) {
-            return override;
-          }
-        })[1];
-
-        if(removedOverride.type === OverwriteType.Member) {
-          const { tag } = newChannel.guild.members.resolve(removedOverride.id).user;
-
-          diff[diff.length] = `Removed an override for ${inlineCodeBlock(tag)}`;
-        } else {
-          const { name } = newChannel.guild.roles.resolve(removedOverride.id)
-
-          diff[diff.length] = `Removed an override for ${inlineCodeBlock(name)}`;
-        }
-      } else { // An override was edited, oldChPerms and newChPerms length are equal.
-        for(let i = 0; i < oldChPerms.length; i++) {
-          const oldPerms = oldChPerms[i][1];
-          const newPerms = newChPerms[i][1];
-
-          if(oldPerms.allow.bitfield !== newPerms.allow.bitfield || oldPerms.deny.bitfield !== newPerms.deny.bitfield) {
-            // I dont like it this time either 😢
-            const permArr = [];
-            const logPermArr = [];
-
-            const { type } = newPerms;
-            const name = newPerms.type === OverwriteType.Member
-              ? newChannel.guild.members.resolve(newPerms.id).user.tag
-              : newChannel.guild.roles.resolve(newPerms.id).name;
-
-            const oldAllow = oldPerms.allow.serialize(true);
-            const oldDeny = oldPerms.deny.serialize(true);
-
-            const newAllow = newPerms.allow.serialize(true);
-            const newDeny = newPerms.deny.serialize(true);
-
-            for(const key in newAllow) {
-              const formattedPermissionKey = this.formatRawDJSPermissionString(key as PermissionsString);
-
-              const isNewAllowed = newAllow[key];
-              const isOldAllowed = oldAllow[key];
-
-              const isNewDenied = newDeny[key];
-              const isOldDenied = oldDeny[key];
-
-              // I hope no one sees this ^_^
-              if(isNewDenied && !isOldDenied && isOldAllowed) { // Allowed to denied
-                permArr[permArr.length] = `Set ${inlineCodeBlock(formattedPermissionKey)} from ✅ to ❌`;
-              } else if(!isNewAllowed && !isNewDenied && isOldAllowed) { // Allowed to neutral
-                permArr[permArr.length] = `Set ${inlineCodeBlock(formattedPermissionKey)} from ✅ to ➖`;
-              } else if(isNewAllowed && !isOldAllowed && isOldDenied) { // Denied to allowed
-                permArr[permArr.length] = `Set ${inlineCodeBlock(formattedPermissionKey)} from ❌ to ✅`;
-              } else if(!isNewAllowed && !isNewDenied && isOldDenied) { // Denied to neutral
-                permArr[permArr.length] = `Set ${inlineCodeBlock(formattedPermissionKey)} from ❌ to ➖`;
-              } else if(isNewAllowed && !isOldAllowed && !isOldDenied) { // Neutral to Allowed
-                permArr[permArr.length] = `Set ${inlineCodeBlock(formattedPermissionKey)} from ➖ to ✅`;
-              } else if(isNewDenied && !isOldDenied && !isOldAllowed) { // Neutral to denied
-                permArr[permArr.length] = `Set ${inlineCodeBlock(formattedPermissionKey)} from ➖ to ❌`;
-              }
-            }
-
-            diff[diff.length] = `Changed permissions for the ${type} ${inlineCodeBlock(name)}:\n  - ${permArr.join('\n  - ')}`;
-          }
-        }
-      }
 
       if(oldChannel.name !== newChannel.name) {
         diff[diff.length] = `Changed the name from ${bold(oldChannel.name)} to ${bold(newChannel.name)}`
@@ -982,6 +904,9 @@ export class ModerationLogger {
         .setAuthor({ name: `Deleted message from ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
         .setDescription(`${bold('Channel')}: ${inlineCodeBlock(message.channel.name)}`)
 
+      const currUTCTime = new Date(Date.now());
+      const timeDiff = (((currUTCTime.getTime() - message.createdAt.getTime()) / 1000) / 60).toFixed(2);
+
       const hasMentions = !!(
         message.mentions.users.size
           + message.mentions.members.size
@@ -991,9 +916,6 @@ export class ModerationLogger {
       const isMessageReply = !!message.mentions.repliedUser
 
       if(hasMentions) {
-        const currUTCTime = new Date(Date.now());
-        const timeDiff = (((currUTCTime.getTime() - message.createdAt.getTime()) / 1000) / 60).toFixed(2);
-
         embed.setDescription(stripIndent(`
           ${bold('Potential Ghost Ping')}
           ${bold('Time Between')}: ${inlineCodeBlock(timeDiff)} minutes
@@ -1002,14 +924,25 @@ export class ModerationLogger {
           ${message.content ?? 'NO_CONTENT'}
         `));
       } else {
-        embed.setDescription(stripIndent(`
-          ${bold('Channel')}: ${inlineCodeBlock(message.channel.name)}
-          ${bold('Content')}:\n\n${message.content ?? 'NO_CONTENT'}
-        `));
-      }
-
-      if(isMessageReply) {
-        embed.setFooter({ text: 'This mention was a message reply' });
+        if(isMessageReply) {
+          embed
+            .setFooter({ text: 'This mention was a message reply' })
+            .setDescription(stripIndent(`
+              ${bold('Potential Ghost Ping')}
+              ${bold('Time Between')}: ${inlineCodeBlock(timeDiff)} minutes
+              ${bold('Mentioned User')}: ${inlineCodeBlock(userMention(message.mentions.repliedUser.id))}
+              ${bold('Channel')}: ${inlineCodeBlock(message.channel.name)}
+              ${bold('Content')}:
+              ${message.content ?? 'NO_CONTENT'}
+            `));
+        } else {
+          embed
+            .setDescription(stripIndent(`
+              ${bold('Channel')}: ${inlineCodeBlock(message.channel.name)}
+              ${bold('Content')}:
+              ${message.content ?? 'NO_CONTENT'}
+            `));
+        }
       }
 
       this.log(message.guildId, { embeds: [ embed ], pingModRole: hasMentions }, cfg);
@@ -1017,6 +950,10 @@ export class ModerationLogger {
   }
 
   /**
+   * ! Do not take args as a parameter from messageCreate event.
+   * ! The array is passed by reference so the Array.shift() operation
+   * ! affects this function too, leading to a missing argument even if this
+   * ! method is called before the message handler shifts the args array for a command.
    * @description Handles the event messageCreate
    * @public
    * @async
@@ -1029,10 +966,16 @@ export class ModerationLogger {
         this.cachedCFG = await this.configManager.get(message.guildId);
       }
 
-      if(message.author.bot || this.cachedCFG.ignoredChannelIDs.includes(message.channelId)) return;
+      if(message.author.bot || this.cachedCFG.ignoredChannelIDs.includes(message.channelId)) {
+        return;
+      }
 
-      const hasAttachments = !!(message.attachments.size);
       const messageObject = { embeds: [], files: [] };
+      let firstEmbedHasAttachment = false;
+
+      const mediaURLs = message.content.split(/ +/).filter(arg => MEDIA_SUFFIX_REGEX.test(arg));
+      const hasAttachments = !!(message.attachments.size);
+      const hasMediaURLs = !!mediaURLs.length;
 
       const firstEmbed = new LogEmbed(1)
         .setAuthor({ name: `Message from ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
@@ -1081,7 +1024,32 @@ export class ModerationLogger {
             )
           }
         }
+      }
 
+      if(hasMediaURLs) {
+        if(!firstEmbedHasAttachment) {
+          const firstURL = mediaURLs.shift();
+          firstEmbed.setImage(firstURL);
+        }
+
+        for(const url of mediaURLs) {
+          const splitURL = url.split('.');
+          const extension = splitURL.pop();
+          const fileName = splitURL.join('.');
+
+          messageObject.embeds.push(
+            new LogEmbed(3)
+              .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
+              .setImage(url)
+              .setDescription(stripIndent(`
+                ${bold('Name')}: ${inlineCodeBlock(fileName)}
+                ${bold('Extension')}: ${inlineCodeBlock(extension)}
+              `))
+          )
+        }
+      }
+
+      if(hasMediaURLs || hasAttachments) {
         this.log(message.guildId, { embeds: [ firstEmbed, ...messageObject.embeds ], files: messageObject.files });
       }
     } catch (err) {
@@ -1106,7 +1074,7 @@ export class ModerationLogger {
       if(auditLogEntry.target.id === member.user.id) {
         const embed = new LogEmbed(2)
           .setAuthor({ name: `${member.user.tag} was just kicked by ${auditLogEntry.executor.tag}` })
-          .setDescription(`${bold('Reason')}\n${codeBlock(auditLogEntry.reason)}`);
+          .setDescription(`${bold('Reason')}\n${codeBlock(auditLogEntry.reason || 'NO_REASON')}`);
 
         this.log(guildID, { embeds: [ embed ] });
       }

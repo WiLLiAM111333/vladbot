@@ -12,7 +12,6 @@ export default class extends Event<'messageCreate'> {
     if(message.channel.isDMBased()) return;
 
     const { prefix } = client.commandHandler;
-
     const hasPrefix = message.content.startsWith(prefix);
 
     const args = hasPrefix
@@ -22,9 +21,8 @@ export default class extends Event<'messageCreate'> {
     const command = args.shift()?.toLowerCase();
 
     if(hasPrefix && command && client.commandHandler.hasCommand(command)) {
-      client.commandHandler.execute(command, message, args);
+      return client.commandHandler.execute(command, message, args);
     }
-
-    client.moderationLogger.handleMessageCreate(message);
+    client.moderationLogger.handleMessageCreate(message)
   }
 }
