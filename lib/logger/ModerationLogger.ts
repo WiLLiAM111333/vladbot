@@ -32,7 +32,7 @@ import {
   userMention
 } from 'discord.js';
 
-const { discordSupportedMedias, Environments, MEDIA_SUFFIX_REGEX } = Constants;
+const { discordSupportedMedias, Environments, MEDIA_SUFFIX_REGEX, URL_REGEX } = Constants;
 const { bold, cursive, inlineCodeBlock, codeBlock } = DiscordFormatter;
 
 /**
@@ -1029,23 +1029,28 @@ export class ModerationLogger {
       if(hasMediaURLs) {
         if(!firstEmbedHasAttachment) {
           const firstURL = mediaURLs.shift();
-          firstEmbed.setImage(firstURL);
+
+          if(URL_REGEX.test(firstURL)) {
+            firstEmbed.setImage(firstURL);
+          }
         }
 
         for(const url of mediaURLs) {
-          const splitURL = url.split('.');
-          const extension = splitURL.pop();
-          const fileName = splitURL.join('.');
+          if(URL_REGEX.test(url)) {
+            const splitURL = url.split('.');
+            const extension = splitURL.pop();
+            const fileName = splitURL.join('.');
 
-          messageObject.embeds.push(
-            new LogEmbed(3)
-              .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
-              .setImage(url)
-              .setDescription(stripIndent(`
-                ${bold('Name')}: ${inlineCodeBlock(fileName)}
-                ${bold('Extension')}: ${inlineCodeBlock(extension)}
-              `))
-          )
+            messageObject.embeds.push(
+              new LogEmbed(3)
+                .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
+                .setImage(url)
+                .setDescription(stripIndent(`
+                  ${bold('Name')}: ${inlineCodeBlock(fileName)}
+                  ${bold('Extension')}: ${inlineCodeBlock(extension)}
+                `))
+            )
+          }
         }
       }
 
