@@ -4,7 +4,7 @@ import { Snowflake } from "discord.js";
 import { FuckYou } from '../../mongo/FuckYou';
 
 export class ModerationLoggerConfigManager {
-  public async add({ guildID, logChannelID, modRoleID }: Optional<IModerationLoggerConfig>): Promise<void> {
+  public async create({ guildID, logChannelID, modRoleID }: Optional<IModerationLoggerConfig>): Promise<void> {
     try {
       const cfg = new ModerationLoggerConfig({ guildID, logChannelID, modRoleID });
 
@@ -22,8 +22,12 @@ export class ModerationLoggerConfigManager {
       const obj = { guildID }
 
       for(const key in old) {
-        if(data[key] && data[key] !== old[key]) {
-          obj[key] = data[key];
+        const oldValue = old[key];
+        const newValue = data[key];
+
+        if(newValue && newValue !== oldValue) {
+          //! Do not re-assign oldValue as it does not change the object.
+          obj[key] = newValue;
         }
       }
 

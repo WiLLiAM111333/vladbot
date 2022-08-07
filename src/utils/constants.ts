@@ -27,5 +27,5 @@ export namespace Constants {
   export const URL_REGEX = /https?:\/\/(\w+\.)*\w+((\/|\.)([\w\?\&=\-_%@:\+#\$'\*,;~]+))*/;
   export const HOST_REGEX = /([A-Za-z0-9\-\._~:]+(%[0-9a-f][a-f0-9])*)+@((\b((?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(?:(?<!\.)\b|\.)){4})|localhost):?(\d+)?/
   export const PE_REGEX = /%[0-9a-f][a-f0-9]/
-  export const MEDIA_SUFFIX_REGEX = new RegExp(`(?!${URL_REGEX.source}\\.)(${discordSupportedMedias.join('|')})`)
+  export const MEDIA_SUFFIX_REGEX = new RegExp(`(?!${URL_REGEX.source}\\.)(${discordSupportedMedias.join('|')})$`)
 }

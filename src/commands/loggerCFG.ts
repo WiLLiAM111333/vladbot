@@ -71,7 +71,7 @@ export default class extends Command {
       return await oldCFG.save();
     }
 
-    await this.configManger.add({
+    await this.configManger.create({
       guildID,
       [key]: value
     });
