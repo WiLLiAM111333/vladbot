@@ -29,7 +29,9 @@ import {
   GuildMember,
   roleMention,
   channelMention,
-  userMention
+  userMention,
+  Guild,
+  GuildAuditLogs
 } from 'discord.js';
 
 const { discordSupportedMedias, Environments, MEDIA_SUFFIX_REGEX, URL_REGEX } = Constants;
@@ -177,6 +179,15 @@ export class ModerationLogger {
     this.auditLogs.delete(guildID);
 
     return log;
+  }
+
+  private async findAuditLog<TActionType extends 'Update' | 'Create' | 'Delete', TTargetType extends GuildAuditLogsTargetType>(guild: Guild, type: AuditLogEvent) {
+    const guildID = guild.id;
+
+    const lastLog = this.getLastAuditLogID(guildID);
+    const logs = await guild.fetchAuditLogs({ type });
+
+    return logs.entries.find(log => log.id !== lastLog);
   }
 
   /**
@@ -1079,7 +1090,8 @@ export class ModerationLogger {
       if(auditLogEntry.target.id === member.user.id) {
         const embed = new LogEmbed(2)
           .setAuthor({ name: `${member.user.tag} was just kicked by ${auditLogEntry.executor.tag}` })
-          .setDescription(`${bold('Reason')}\n${codeBlock(auditLogEntry.reason || 'NO_REASON')}`);
+          .setDescription(`${bold('Reason')}\n${codeBlock(auditLogEntry.reason || 'NO_REASON')}`)
+          .setFooter({ text: 'Sometimes the user kicking is inaccurate as there is no new audit log entry' });
 
         this.log(guildID, { embeds: [ embed ] });
       }
