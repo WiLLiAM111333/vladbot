@@ -30,8 +30,7 @@ import {
   roleMention,
   channelMention,
   userMention,
-  Guild,
-  GuildAuditLogs
+  Guild
 } from 'discord.js';
 
 const { discordSupportedMedias, Environments, MEDIA_SUFFIX_REGEX, URL_REGEX } = Constants;
