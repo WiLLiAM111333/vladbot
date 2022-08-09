@@ -69,7 +69,7 @@ export class ModerationLogger {
    * @private
    * @type {IModerationLoggerConfig}
    */
-  private cachedCFG: IModerationLoggerConfig;
+  private cachedCFGs: Map<Snowflake, IModerationLoggerConfig>; // <GuildID, IModerationLoggerConfig>
 
   /**
    * @public
@@ -81,6 +81,8 @@ export class ModerationLogger {
     this.auditLogs = new Map<Snowflake, Snowflake>(); // Memory leak needs cleaning up
     this.verbose = process.env.NODE_ENV === Environments.DEVELOPMENT;
     this.configManager = new ModerationLoggerConfigManager();
+
+    this.cachedCFGs = new Map();
   }
 
   /**
@@ -154,6 +156,26 @@ export class ModerationLogger {
   }
 
   /**
+   * @description Gets the cached config for the given guild
+   * @private
+   * @param {Snowflake} guildID
+   * @returns {IModerationLoggerConfig}
+   */
+  private getCachedCFG(guildID: Snowflake): IModerationLoggerConfig {
+    return this.cachedCFGs.get(guildID)
+  }
+
+  /**
+   * @description Caches a given config
+   * @private
+   * @param {IModerationLoggerConfig} cfg
+   * @returns {void}
+   */
+  private cacheCFG(cfg: IModerationLoggerConfig): void {
+    this.cachedCFGs.set(cfg.guildID, cfg);
+  }
+
+  /**
    * @description Formats a Discord.JS `PermissionsString` string.
    * @private
    * @param {PermissionsString} perm
@@ -173,6 +195,8 @@ export class ModerationLogger {
    * @returns {Snowflake}
    */
   private getLastAuditLogID(guildID: Snowflake): Snowflake {
+    console.log(this.auditLogs); //! DELETE THIS LATER ITS TEMPORARY
+
     const log = this.auditLogs.get(guildID);
 
     this.auditLogs.delete(guildID);
@@ -180,13 +204,21 @@ export class ModerationLogger {
     return log;
   }
 
-  private async findAuditLog<TActionType extends 'Update' | 'Create' | 'Delete', TTargetType extends GuildAuditLogsTargetType>(guild: Guild, type: AuditLogEvent) {
+  /**
+   * @description Finds an audit log based on the given AuditLogEvent
+   * @param {Guild} guild
+   * @param {AuditLogEvent} type
+   * @returns {}
+   */
+  private async findAuditLog<TAction extends AuditLogEvent>(guild: Guild, type: TAction): Promise<GuildAuditLogsEntry<TAction>> {
     const guildID = guild.id;
 
     const lastLog = this.getLastAuditLogID(guildID);
     const logs = await guild.fetchAuditLogs({ type });
 
-    return logs.entries.find(log => log.id !== lastLog);
+    const log = logs.entries.find(log => log.id !== lastLog);
+
+    return log;
   }
 
   /**
@@ -196,8 +228,26 @@ export class ModerationLogger {
    * @param {GuildAuditLogsEntry} log
    * @returns {void}
    */
-  private assignAuditLogEntry<TAction extends AuditLogEvent, TActionType extends 'Update' | 'Create' | 'Delete', TTargetType extends GuildAuditLogsTargetType>(guildID: Snowflake, log: GuildAuditLogsEntry<TAction, TActionType, TTargetType>): void {
+  private assignAuditLogEntry<TAction extends AuditLogEvent, TActionType extends 'All' | 'Update' | 'Create' | 'Delete', TTargetType extends GuildAuditLogsTargetType>(guildID: Snowflake, log: GuildAuditLogsEntry<TAction, TActionType, TTargetType>): void {
     this.auditLogs.set(guildID, log?.id ?? this.auditLogs.get(guildID));
+  }
+
+  /**
+   * @description Checks if a given message includes a mentioned user, only checked in messageDelete event
+   * @private
+   * @param {Message} message
+   * @returns {boolean}
+   */
+  private isGhostPing(message: Message): boolean {
+    const { members, roles } = message.mentions;
+
+    for(const [ , member ] of members) {
+      if(!member.user.bot) {
+        return true;
+      }
+    }
+
+    return !!roles.size;
   }
 
   /**
@@ -278,15 +328,14 @@ export class ModerationLogger {
    * @returns {Promise<void>}
    */
   public async handleChannelCreate(channel: GuildChannel): Promise<void> {
-    const { type: rawType, name, guildId } = channel;
+    const { type: rawType, name, guildId, guild } = channel;
 
     if([ChannelType.GuildPrivateThread, ChannelType.GuildPublicThread, ChannelType.GuildNewsThread, ChannelType.DM].includes(rawType)) { // Ignore threads and DMs
       return;
     }
 
     try {
-      const auditLogs = await channel.guild.fetchAuditLogs({ type: AuditLogEvent.ChannelCreate });
-      const auditLogEntry = auditLogs.entries.find(log => log.id !== this.getLastAuditLogID(guildId));
+      const auditLogEntry = await this.findAuditLog(guild, AuditLogEvent.ChannelCreate);
 
       const type = this.convertDJSType(channel);
       const tag = this.getTagFromAuditLog(auditLogEntry);
@@ -318,7 +367,6 @@ export class ModerationLogger {
         .setDescription(descriptionStr);
 
       this.log(guildId, { embeds: [ embed ] });
-
       this.assignAuditLogEntry(guildId, auditLogEntry);
     } catch (err) {
       this.handleError(err);
@@ -333,15 +381,14 @@ export class ModerationLogger {
    * @returns {Promise<void>}
    */
   public async handleChannelDelete(channel: NonThreadGuildBasedChannel): Promise<void> {
-    const { type: rawType, name , guildId} = channel;
+    const { type: rawType, name, guild, guildId } = channel;
 
     if([ChannelType.GuildPrivateThread, ChannelType.GuildPublicThread, ChannelType.GuildNewsThread, ChannelType.DM].includes(rawType)) { // Ignore threads and DMs
       return;
     }
 
     try {
-      const auditLogs = await channel.guild.fetchAuditLogs({ type: AuditLogEvent.ChannelDelete });
-      const auditLogEntry = auditLogs.entries.find(log => log.id !== this.getLastAuditLogID(guildId));
+      const auditLogEntry = await this.findAuditLog(guild, AuditLogEvent.ChannelDelete);
 
       const type = this.convertDJSType(channel);
       const tag = this.getTagFromAuditLog(auditLogEntry);
@@ -354,7 +401,6 @@ export class ModerationLogger {
         .setAuthor({ name: authorStr, iconURL: this.getAvatarFromAuditLog(auditLogEntry) });
 
       this.log(guildId, { embeds: [ embed ] });
-
       this.assignAuditLogEntry(guildId, auditLogEntry);
     } catch (err) {
       this.handleError(err);
@@ -370,7 +416,10 @@ export class ModerationLogger {
    * @returns {Promise<void>}
    */
   public async handleChannelUpdate(oldChannel: GuildChannel, newChannel: GuildChannel): Promise<void> {
-    if([ChannelType.GuildPrivateThread, ChannelType.GuildPublicThread, ChannelType.GuildNewsThread, ChannelType.DM].includes(oldChannel.type)) { // Ignore threads and DMs
+    // I dont like it either 😫
+    const disallowedChannelTypes = [ChannelType.GuildPrivateThread, ChannelType.GuildPublicThread, ChannelType.GuildNewsThread, ChannelType.DM];
+
+    if(disallowedChannelTypes.includes(oldChannel.type)) { // Ignore threads and DMs
       return;
     }
 
@@ -378,14 +427,11 @@ export class ModerationLogger {
       return;
     }
 
-    // I dont like it either 😫
-    const { guildId } = oldChannel;
-
+    const { guild, guildId } = oldChannel;
     const diff = [];
 
     try {
-      const auditLogs = await newChannel.guild.fetchAuditLogs({ type: AuditLogEvent.ChannelUpdate });
-      const auditLogEntry = auditLogs.entries.find(log => log.id !== this.getLastAuditLogID(guildId));
+      const auditLogEntry = await this.findAuditLog(guild, AuditLogEvent.ChannelUpdate);
 
       if(oldChannel.name !== newChannel.name) {
         diff[diff.length] = `Changed the name from ${bold(oldChannel.name)} to ${bold(newChannel.name)}`
@@ -411,7 +457,7 @@ export class ModerationLogger {
           const [ oldTopic, newTopic ] = [oldChannel.topic, newChannel.topic];
 
           if(((oldTopic?.length ?? 0) + (newTopic?.length ?? 0) + Util.getCombinedStringArrayLength(diff)) <= 4082 - (3 * diff.length)) {
-            diff[diff.length] = `Topic changed from:\n"${cursive(oldTopic)}" to:\n"${cursive(newTopic)}"`;
+            diff[diff.length] = `Topic changed from:\n"${cursive(oldTopic ?? 'NO_TOPIC')}" to:\n"${cursive(newTopic)}"`;
           }
         }
 
@@ -448,7 +494,6 @@ export class ModerationLogger {
         .setDescription(diff.join(`\n`));
 
       this.log(guildId, { embeds: [ embed ] });
-
       this.assignAuditLogEntry(guildId, auditLogEntry);
     } catch (err) {
       this.handleError(err);
@@ -467,9 +512,7 @@ export class ModerationLogger {
       const { name, url, guild } = emote;
       const guildID = guild.id;
 
-      const auditLogs = await emote.guild.fetchAuditLogs({ type: AuditLogEvent.EmojiCreate });
-      const auditLogEntry = auditLogs.entries.find(log => log.id !== this.getLastAuditLogID(guildID));
-
+      const auditLogEntry = await this.findAuditLog(guild, AuditLogEvent.EmojiCreate);
       const description = `${emote.animated ? bold('Requires Nitro\n') : ''}`;
 
       const author = emote.author
@@ -481,10 +524,12 @@ export class ModerationLogger {
       const embed = new LogEmbed(0)
         .setAuthor({ name: authorStr, iconURL: author.displayAvatarURL() })
         .setImage(url)
-        .setDescription(description);
+
+      if(description) {
+        embed.setDescription(description);
+      }
 
       this.log(guildID, { embeds: [ embed ] });
-
       this.assignAuditLogEntry(guildID, auditLogEntry);
     } catch(err) {
       this.handleError(err);
@@ -503,8 +548,7 @@ export class ModerationLogger {
     const guildID = guild.id;
 
     try {
-      const auditLogs = await emote.guild.fetchAuditLogs({ type: AuditLogEvent.EmojiDelete });
-      const auditLogEntry = auditLogs.entries.find(log => log.id !== this.getLastAuditLogID(guildID));
+      const auditLogEntry = await this.findAuditLog(guild, AuditLogEvent.EmojiDelete);
       const tag = this.getTagFromAuditLog(auditLogEntry);
 
       const authorStr = `The emote "${name}" has been deleted by ${tag}`;
@@ -514,7 +558,6 @@ export class ModerationLogger {
         .setImage(url);
 
       this.log(guildID, { embeds: [ embed ] });
-
       this.assignAuditLogEntry(guildID, auditLogEntry);
     } catch(err) {
       if(err.code === 10014 && err.httpStataus === 404) {
@@ -542,8 +585,7 @@ export class ModerationLogger {
       const { name: newName } = newEmote;
       const guildID = guild.id;
 
-      const auditLogs = await oldEmote.guild.fetchAuditLogs({ type: AuditLogEvent.EmojiUpdate });
-      const auditLogEntry = auditLogs.entries.find(log => log.id !== this.getLastAuditLogID(guildID));
+      const auditLogEntry = await this.findAuditLog(guild, AuditLogEvent.EmojiUpdate);
 
       if(oldName !== newName) {
         const tag = this.getTagFromAuditLog(auditLogEntry);
@@ -555,7 +597,6 @@ export class ModerationLogger {
           .setImage(newEmote.url);
 
         this.log(guildID, { embeds: [ embed ] });
-
         this.assignAuditLogEntry(guildID, auditLogEntry);
       }
     } catch(err) {
@@ -575,8 +616,7 @@ export class ModerationLogger {
       const { user, reason, guild } = ban;
       const guildID = guild.id;
 
-      const auditLogs = await ban.guild.fetchAuditLogs({ type: AuditLogEvent.MemberBanAdd });
-      const auditLogEntry = auditLogs.entries.find(log => log.id !== this.getLastAuditLogID(guildID));
+      const auditLogEntry = await this.findAuditLog(guild, AuditLogEvent.MemberBanAdd);
 
       const tag = this.getTagFromAuditLog(auditLogEntry);
       const parsedReason = reason ?? auditLogEntry?.reason ?? 'No Reason Set';
@@ -587,7 +627,6 @@ export class ModerationLogger {
         .setAuthor({ name: authorStr })
 
       this.log(guildID, { embeds: [ embed ] });
-
       this.assignAuditLogEntry(guildID, auditLogEntry);
     } catch (err) {
       this.handleError(err);
@@ -606,8 +645,7 @@ export class ModerationLogger {
       const { user, reason, guild } = ban;
       const guildID = guild.id;
 
-      const auditLogs = await ban.guild.fetchAuditLogs({ type: AuditLogEvent.MemberBanRemove });
-      const auditLogEntry = auditLogs.entries.find(log => log.id !== this.getLastAuditLogID(guildID));
+      const auditLogEntry = await this.findAuditLog(guild, AuditLogEvent.MemberBanRemove);
 
       const tag = this.getTagFromAuditLog(auditLogEntry);
       const authorStr = `"${user.tag}" has been un-banned by ${tag}`;
@@ -617,7 +655,6 @@ export class ModerationLogger {
         .setDescription(`They were originally banned for the following reason:\n${bold(`"${reason ?? auditLogEntry?.reason ?? 'No Reason Set'}"`)}`);
 
       this.log(guildID, { embeds: [ embed ] });
-
       this.assignAuditLogEntry(guildID, auditLogEntry);
     } catch (err) {
       this.handleError(err);
@@ -636,8 +673,7 @@ export class ModerationLogger {
       const { hexColor, hoist, mentionable, id, name, guild } = role;
       const guildID = guild.id;
 
-      const auditLogs = await role.guild.fetchAuditLogs({ type: AuditLogEvent.RoleCreate });
-      const auditLogEntry = auditLogs.entries.find(log => log.id !== this.getLastAuditLogID(guildID));
+      const auditLogEntry = await this.findAuditLog(guild, AuditLogEvent.RoleCreate);
 
       const tag = this.getTagFromAuditLog(auditLogEntry);
       const formattedHoist = this.convertBoolToStr(hoist);
@@ -658,7 +694,6 @@ export class ModerationLogger {
         .setDescription(descriptionStr);
 
       this.log(guildID, { embeds: [ embed ] });
-
       this.assignAuditLogEntry(guildID, auditLogEntry);
     } catch (err) {
       this.handleError(err);
@@ -680,8 +715,7 @@ export class ModerationLogger {
       const formattedHoist = this.convertBoolToStr(hoist);
       const formattedMentionable = this.convertBoolToStr(mentionable);
 
-      const auditLogs = await role.guild.fetchAuditLogs({ type: AuditLogEvent.RoleDelete });
-      const auditLogEntry = auditLogs.entries.find(log => log.id !== this.getLastAuditLogID(guildID));
+      const auditLogEntry = await this.findAuditLog(guild, AuditLogEvent.RoleDelete);
 
       const embed = new LogEmbed(0)
         .setAuthor({ name: `The role "${name}" was just deleted by ${this.getTagFromAuditLog(auditLogEntry)}`, iconURL: this.getAvatarFromAuditLog(auditLogEntry) })
@@ -693,7 +727,6 @@ export class ModerationLogger {
         `));
 
       this.log(guildID, { embeds: [ embed ] });
-
       this.assignAuditLogEntry(guildID, auditLogEntry);
     } catch (err) {
       this.handleError(err);
@@ -718,8 +751,7 @@ export class ModerationLogger {
       const { name: newName, hexColor: newHex } = newRole;
       const guildID = guild.id;
 
-      const auditLogs = await oldRole.guild.fetchAuditLogs({ type: AuditLogEvent.RoleUpdate });
-      const auditLogEntry = auditLogs.entries.find(log => log.id !== this.getLastAuditLogID(guildID));
+      const auditLogEntry = await this.findAuditLog(guild, AuditLogEvent.RoleUpdate);
 
       let count = 0;
       const diff = [];
@@ -772,12 +804,11 @@ export class ModerationLogger {
       const embed = new LogEmbed(0)
         .setAuthor({ name: `The role "${oldRole.name}" was just edited by ${this.getTagFromAuditLog(auditLogEntry)}`, iconURL: this.getAvatarFromAuditLog(auditLogEntry) })
         .setDescription(diff
-          .map(str => str.length >= 35 ? `${str}\n` : str)
+          .map(str => str.length >= 45 ? `${str}\n` : str)
           .join('\n')
         );
 
       this.log(guildID, { embeds: [ embed ] });
-
       this.assignAuditLogEntry(guildID, auditLogEntry);
     } catch (err) {
       this.handleError(err);
@@ -793,10 +824,9 @@ export class ModerationLogger {
    */
   public async handleStickerCreate(sticker: Sticker): Promise<void> {
     try {
-      const { name, format, url, id, description, guildId } = sticker;
+      const { name, format, url, id, description, guild, guildId } = sticker;
 
-      const auditLogs = await sticker.guild.fetchAuditLogs({ type: AuditLogEvent.StickerCreate });
-      const auditLogEntry = auditLogs.entries.find(log => log.id !== this.getLastAuditLogID(guildId));
+      const auditLogEntry = await this.findAuditLog(guild, AuditLogEvent.StickerCreate)
 
       const author = sticker.user
         ?? await sticker.fetchUser()
@@ -812,7 +842,6 @@ export class ModerationLogger {
         `));
 
       this.log(guildId, { embeds: [ embed ] });
-
       this.assignAuditLogEntry(guildId, auditLogEntry);
     } catch(err) {
       this.handleError(err);
@@ -833,14 +862,13 @@ export class ModerationLogger {
     // Emoji title 32 char max
 
     try {
-      const { name: oldName, description: oldDescription, guildId } = oldSticker;
+      const { name: oldName, description: oldDescription, guild, guildId } = oldSticker;
       const { name: newName, description: newDescription } = newSticker;
 
       let count = 0;
       const diff = [];
 
-      const auditLogs = await oldSticker.guild.fetchAuditLogs({ type: AuditLogEvent.StickerUpdate });
-      const auditLogEntry = auditLogs.entries.find(log => log.id !== this.getLastAuditLogID(guildId));
+      const auditLogEntry = await this.findAuditLog(guild, AuditLogEvent.StickerUpdate);
 
       if(oldName !== newName) {
         diff[count++] = `Changed name from ${bold(oldName)} to ${bold(newName)}`;
@@ -853,12 +881,11 @@ export class ModerationLogger {
       const embed = new LogEmbed(1)
         .setAuthor({ name: `The sticker "${oldSticker.name}" was just edited by ${this.getTagFromAuditLog(auditLogEntry)}`, iconURL: this.getAvatarFromAuditLog(auditLogEntry) })
         .setDescription(diff
-          .map(str => str.length >= 35 ? `${str}\n` : str)
+          .map(str => str.length >= 45 ? `${str}\n` : str)
           .join('\n')
         );
 
       this.log(guildId, { embeds: [ embed ] });
-
       this.assignAuditLogEntry(guildId, auditLogEntry);
     } catch(err) {
       this.handleError(err);
@@ -873,11 +900,10 @@ export class ModerationLogger {
    * @returns {Promise<void>}
    */
   public async handleStickerDelete(sticker: Sticker): Promise<void> {
-    const { name, format, id, description, guildId } = sticker;
+    const { name, format, id, description, guild, guildId } = sticker;
 
     try {
-      const auditLogs = await sticker.guild.fetchAuditLogs({ type: AuditLogEvent.StickerDelete });
-      const auditLogEntry = auditLogs.entries.find(log => log.id !== this.getLastAuditLogID(guildId));
+      const auditLogEntry = await this.findAuditLog(guild, AuditLogEvent.StickerDelete);
 
       const embed = new LogEmbed(1)
         .setAuthor({ name: `The sticker "${name}" was just deleted by ${this.getTagFromAuditLog(auditLogEntry)}`, iconURL: this.getAvatarFromAuditLog(auditLogEntry) })
@@ -888,7 +914,6 @@ export class ModerationLogger {
         `));
 
       this.log(guildId, { embeds: [ embed ] });
-
       this.assignAuditLogEntry(guildId, auditLogEntry);
     } catch (err) {
       this.handleError(err);
@@ -902,9 +927,12 @@ export class ModerationLogger {
    * @param {Message} message
    * @returns {void}
    */
-  public handleMessageDelete(message: Message): void {
-    this.configManager.get(message.guildId).then(cfg => {
-      this.cachedCFG = cfg;
+  public async handleMessageDelete(message: Message): Promise<void> {
+    const guildID = message.guild.id;
+
+    try {
+      const cfg = await this.configManager.get(guildID);
+      this.cachedCFGs.set(guildID, cfg);
 
       // idk how it wouldnt be a textchannel but hey ho lets keep it
       if((cfg && message.channel.id === cfg.logChannelID) || !(message.channel instanceof TextChannel) || cfg.ignoredChannelIDs.includes(message.channelId) || !message.guild) return;
@@ -916,15 +944,10 @@ export class ModerationLogger {
       const currUTCTime = new Date(Date.now());
       const timeDiff = (((currUTCTime.getTime() - message.createdAt.getTime()) / 1000) / 60).toFixed(2);
 
-      const hasMentions = !!(
-        message.mentions.users.size
-          + message.mentions.members.size
-          + message.mentions.roles.size
-      );
+      const isGhostPing = this.isGhostPing(message);
+      const isMessageReply = !!message.mentions.repliedUser && !message.mentions.repliedUser.bot
 
-      const isMessageReply = !!message.mentions.repliedUser
-
-      if(hasMentions) {
+      if(isGhostPing) {
         embed.setDescription(stripIndent(`
           ${bold('Potential Ghost Ping')}
           ${bold('Time Between')}: ${inlineCodeBlock(timeDiff)} minutes
@@ -954,8 +977,10 @@ export class ModerationLogger {
         }
       }
 
-      this.log(message.guildId, { embeds: [ embed ], pingModRole: hasMentions }, cfg);
-    }).catch(err => this.handleError(err));
+      this.log(guildID, { embeds: [ embed ], pingModRole: isGhostPing || isMessageReply }, cfg);
+    } catch(err) {
+      this.handleError(err);
+    }
   }
 
   /**
@@ -970,12 +995,12 @@ export class ModerationLogger {
    * @returns {Promise<void>}
    */
   public async handleMessageCreate(message: Message): Promise<void> {
-    try {
-      if(!this.cachedCFG) {
-        this.cachedCFG = await this.configManager.get(message.guildId);
-      }
+    const { guildId } = message;
 
-      if(message.author.bot || this.cachedCFG.ignoredChannelIDs.includes(message.channelId)) {
+    try {
+      const cfg = this.getCachedCFG(guildId) ?? await this.configManager.get(guildId);
+
+      if(message.author.bot || cfg.ignoredChannelIDs.includes(message.channelId)) {
         return;
       }
 
@@ -986,7 +1011,7 @@ export class ModerationLogger {
       const hasAttachments = !!(message.attachments.size);
       const hasMediaURLs = !!mediaURLs.length;
 
-      const firstEmbed = new LogEmbed(1)
+      const firstEmbed = new LogEmbed(0)
         .setAuthor({ name: `Message from ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
         .setDescription(stripIndent(`
           ${bold('Author')}: ${inlineCodeBlock(message.author.tag)}
@@ -1081,18 +1106,19 @@ export class ModerationLogger {
    */
   public async handleGuildMemberRemove(member: GuildMember): Promise<void> {
     try {
-      const guildID = member.guild.id;
+      const { guild } = member;
+      const guildID = guild.id;
 
-      const auditLogs = await member.guild.fetchAuditLogs({ type: AuditLogEvent.MemberKick });
-      const auditLogEntry = auditLogs.entries.find(log => log.id !== this.getLastAuditLogID(guildID));
+      const auditLogEntry = await this.findAuditLog(guild, AuditLogEvent.MemberKick);
 
-      if(auditLogEntry.target.id === member.user.id) {
+      if(auditLogEntry?.target?.id === member.user.id) {
         const embed = new LogEmbed(2)
           .setAuthor({ name: `${member.user.tag} was just kicked by ${auditLogEntry.executor.tag}` })
           .setDescription(`${bold('Reason')}\n${codeBlock(auditLogEntry.reason || 'NO_REASON')}`)
           .setFooter({ text: 'Sometimes the user kicking is inaccurate as there is no new audit log entry' });
 
         this.log(guildID, { embeds: [ embed ] });
+        this.assignAuditLogEntry(guildID, auditLogEntry);
       }
     } catch (err) {
       this.handleError(err);
