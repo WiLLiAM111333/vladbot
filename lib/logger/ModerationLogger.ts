@@ -195,8 +195,6 @@ export class ModerationLogger {
    * @returns {Snowflake}
    */
   private getLastAuditLogID(guildID: Snowflake): Snowflake {
-    console.log(this.auditLogs); //! DELETE THIS LATER ITS TEMPORARY
-
     const log = this.auditLogs.get(guildID);
 
     this.auditLogs.delete(guildID);
