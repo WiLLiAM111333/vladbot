@@ -489,7 +489,7 @@ export class ModerationLogger {
 
       const embed = new LogEmbed(1)
         .setAuthor({ name: authorStr, iconURL: this.getAvatarFromAuditLog(auditLogEntry) })
-        .setDescription(diff.join(`\n`));
+        .setDescription(diff.length ? diff.join('\n') : 'Unsupported changes');
 
       this.log(guildId, { embeds: [ embed ] });
       this.assignAuditLogEntry(guildId, auditLogEntry);
