@@ -33,8 +33,9 @@ import {
   Guild
 } from 'discord.js';
 
-const { discordSupportedMedias, Environments, MEDIA_SUFFIX_REGEX, URL_REGEX } = Constants;
+const { discordSupportedMedias, MEDIA_SUFFIX_REGEX, URL_REGEX, TENOR_REGEX } = Constants;
 const { bold, cursive, inlineCodeBlock, codeBlock } = DiscordFormatter;
+const { getCombinedStringArrayLength, isProduction } = Util;
 
 /**
  * Handles logging throughout guilds
@@ -79,7 +80,7 @@ export class ModerationLogger {
   public constructor(client: VladimirClient) {
     this.client = client;
     this.auditLogs = new Map<Snowflake, Snowflake>(); // Memory leak needs cleaning up
-    this.verbose = process.env.NODE_ENV === Environments.DEVELOPMENT;
+    this.verbose = !isProduction();
     this.configManager = new ModerationLoggerConfigManager();
 
     this.cachedCFGs = new Map();
@@ -454,7 +455,7 @@ export class ModerationLogger {
         if(oldChannel.topic !== newChannel.topic) {
           const [ oldTopic, newTopic ] = [oldChannel.topic, newChannel.topic];
 
-          if(((oldTopic?.length ?? 0) + (newTopic?.length ?? 0) + Util.getCombinedStringArrayLength(diff)) <= 4082 - (3 * diff.length)) {
+          if(((oldTopic?.length ?? 0) + (newTopic?.length ?? 0) + getCombinedStringArrayLength(diff)) <= 4082 - (3 * diff.length)) {
             diff[diff.length] = `Topic changed from:\n"${cursive(oldTopic ?? 'NO_TOPIC')}" to:\n"${cursive(newTopic)}"`;
           }
         }
@@ -462,7 +463,7 @@ export class ModerationLogger {
         if(oldChannel.rateLimitPerUser !== newChannel.rateLimitPerUser) {
           const diffStr = `Set slowmode to ${bold(newChannel.rateLimitPerUser)} seconds from ${bold(oldChannel.rateLimitPerUser)}`;
 
-          if(diffStr.length + Util.getCombinedStringArrayLength(diff) < 4096 - (3 * diff.length)) {
+          if(diffStr.length + getCombinedStringArrayLength(diff) < 4096 - (3 * diff.length)) {
             diff[diff.length] = diffStr;
           }
         }
@@ -932,7 +933,7 @@ export class ModerationLogger {
       const cfg = await this.configManager.get(guildID);
       this.cachedCFGs.set(guildID, cfg);
 
-      // idk how it wouldnt be a textchannel but hey ho lets keep it
+      // Avoid the new voice channel text chats (i think)
       if((cfg && message.channel.id === cfg.logChannelID) || !(message.channel instanceof TextChannel) || cfg.ignoredChannelIDs.includes(message.channelId) || !message.guild) return;
 
       const embed = new LogEmbed(0)
@@ -1005,9 +1006,20 @@ export class ModerationLogger {
       const messageObject = { embeds: [], files: [] };
       let firstEmbedHasAttachment = false;
 
-      const mediaURLs = message.content.split(/ +/).filter(arg => MEDIA_SUFFIX_REGEX.test(arg));
+      const mediaURLs = message.content
+        .replace(/\n/g, ' ')
+        .split(/\s+/)
+        .filter(arg => arg && (MEDIA_SUFFIX_REGEX.test(arg) || TENOR_REGEX.test(arg)));
+
       const hasAttachments = !!(message.attachments.size);
       const hasMediaURLs = !!mediaURLs.length;
+
+      if(this.verbose) {
+        console.log(message.attachments);
+        console.log(mediaURLs);
+
+        mediaURLs.forEach(url => console.log(url))
+      }
 
       const firstEmbed = new LogEmbed(0)
         .setAuthor({ name: `Message from ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
@@ -1021,7 +1033,7 @@ export class ModerationLogger {
 
       if(hasAttachments) {
         const firstAttachment = message.attachments.first();
-        const firstIsSafe = discordSupportedMedias.includes(firstAttachment.name.split('.')[1]);
+        const firstIsSafe = discordSupportedMedias.includes(firstAttachment.name.split('.')[1].toLowerCase());
 
         if(firstIsSafe) {
           messageObject.files.push(firstAttachment);
@@ -1061,10 +1073,18 @@ export class ModerationLogger {
 
       if(hasMediaURLs) {
         if(!firstEmbedHasAttachment) {
-          const firstURL = mediaURLs.shift();
+          const firstURL = mediaURLs[0];
+          const isURL = URL_REGEX.test(firstURL);
+          const isTenorURL = TENOR_REGEX.test(firstURL);
 
-          if(URL_REGEX.test(firstURL)) {
-            firstEmbed.setImage(firstURL);
+          if(isURL && !isTenorURL) {
+            firstEmbed.setImage(mediaURLs.shift());
+          } else if(isURL && isTenorURL) {
+            firstEmbed.addFields({
+              name: 'Reason for missing media:',
+              value: 'Can not display tenor URLs on embeds',
+              inline: false
+            })
           }
         }
 
@@ -1074,15 +1094,25 @@ export class ModerationLogger {
             const extension = splitURL.pop();
             const fileName = splitURL.join('.');
 
-            messageObject.embeds.push(
-              new LogEmbed(3)
-                .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
+            const embed = new LogEmbed(3)
+              .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
+
+            if(TENOR_REGEX.test(url)) {
+              embed
+                .setDescription(stripIndent(`
+                  ${bold('Cannot display tenor URLs')}
+                  ${bold('Tenor URL')}: ${inlineCodeBlock(url)}
+                `))
+            } else {
+              embed
                 .setImage(url)
                 .setDescription(stripIndent(`
                   ${bold('Name')}: ${inlineCodeBlock(fileName)}
                   ${bold('Extension')}: ${inlineCodeBlock(extension)}
                 `))
-            )
+            }
+
+            messageObject.embeds.push(embed);
           }
         }
       }

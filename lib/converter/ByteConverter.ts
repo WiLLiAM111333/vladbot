@@ -10,7 +10,6 @@ export class ByteConverter {
   }
 
   private static isBetween(operand: number, x: number, y: number) {
-    console.log(operand, x, y);
     return operand > x && operand < y;
   }
 

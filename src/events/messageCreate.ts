@@ -1,6 +1,9 @@
 import { Awaitable, Message } from "discord.js";
 import { VladimirClient } from "../../lib/VladimirClient";
 import { Event } from "../../lib/event/Event";
+import { Util } from '../utils/';
+
+const { isProduction } = Util;
 
 export default class extends Event<'messageCreate'> {
   public constructor() {
@@ -12,11 +15,18 @@ export default class extends Event<'messageCreate'> {
     if(message.channel.isDMBased()) return;
 
     const { prefix } = client.commandHandler;
-    const hasPrefix = message.content.startsWith(prefix);
 
-    const args = hasPrefix
-      ? message.content.slice(prefix.length).split(/ +/)
-      : message.content.split(/ +/);
+    const hasPrefix = message.content.startsWith(prefix);
+    const noPrefixContent = message.content.replace(new RegExp(prefix), '');
+
+    const args = noPrefixContent
+      .replace(/\n/g, ' ')
+      .split(/\s+/)
+      .filter(s => s)
+
+    if(!isProduction()) {
+      console.log(args);
+    }
 
     const command = args.shift()?.toLowerCase();
 

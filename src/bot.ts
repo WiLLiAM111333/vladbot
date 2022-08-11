@@ -1,7 +1,7 @@
 import { VladimirClient } from '../lib/VladimirClient';
-import { Constants } from './utils/constants';
+import { Util } from './utils';
 
-const { Environments } = Constants;
+const { isProduction } = Util;
 
 const client = new VladimirClient({
   intents: [
@@ -18,8 +18,8 @@ const client = new VladimirClient({
   ]
 });
 
-if(process.env.NODE_ENV === Environments.DEVELOPMENT) {
-  client.login(process.env.TOKEN_DEV);
-} else {
+if(isProduction()) {
   client.login(process.env.TOKEN);
+} else {
+  client.login(process.env.TOKEN_DEV);
 }
