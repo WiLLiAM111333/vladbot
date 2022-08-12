@@ -29,6 +29,15 @@ export default class extends Command {
     try {
       switch(query) {
         case 'create': {
+          if(!message.member.permissions.has('BanMembers')) {
+            const embed = new EmbedBuilder()
+              .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
+              .setColor('#ff0000')
+              .setDescription('You do not have permission to create tags!');
+
+            return message.channel.send({ embeds: [ embed ] });
+          }
+
           const tag = args.shift();
           const text = args.join(' ');
           const hasTag = await this.tagManager.has(guildID, tag);
@@ -57,6 +66,15 @@ export default class extends Command {
         }
 
         case 'update': {
+          if(!message.member.permissions.has('BanMembers')) {
+            const embed = new EmbedBuilder()
+              .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
+              .setColor('#ff0000')
+              .setDescription('You do not have permission to update tags!');
+
+            return message.channel.send({ embeds: [ embed ] });
+          }
+
           const tag = args.shift();
           const text = args.join(' ');
           const hasTag = await this.tagManager.has(guildID, tag);
@@ -85,6 +103,15 @@ export default class extends Command {
         }
 
         case 'delete': {
+          if(!message.member.permissions.has('BanMembers')) {
+            const embed = new EmbedBuilder()
+              .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
+              .setColor('#ff0000')
+              .setDescription('You do not have permission to delete tags!');
+
+            return message.channel.send({ embeds: [ embed ] });
+          }
+
           const tag = args.shift();
           const hasTag = await this.tagManager.has(guildID, tag);
 
