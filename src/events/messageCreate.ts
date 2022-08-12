@@ -33,6 +33,7 @@ export default class extends Event<'messageCreate'> {
     if(hasPrefix && command && client.commandHandler.hasCommand(command)) {
       return client.commandHandler.execute(command, message, args);
     }
+
     client.moderationLogger.handleMessageCreate(message)
   }
 }

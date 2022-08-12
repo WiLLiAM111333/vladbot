@@ -4,9 +4,9 @@ import { FuckYou } from '../mongo/FuckYou';
 import { ITag } from './ITag';
 
 export class TagManager {
-  public async create({ guildID, text }: Optional<ITag>): Promise<void> {
+  public async create(data: Optional<ITag>): Promise<void> {
     try {
-      const cfg = new Tag({ guildID, text });
+      const cfg = new Tag(data);
 
       await cfg.save();
     } catch (err: unknown) {
@@ -37,17 +37,25 @@ export class TagManager {
     }
   }
 
-  public async has(guildID: Snowflake): Promise<boolean> {
+  public async has(guildID: Snowflake, tag: string): Promise<boolean> {
     try {
-      return !!(await Tag.findOne({ guildID }))
+      return !!(await Tag.findOne({ guildID, tag }))
     } catch (err: unknown) {
       this.handleError(err);
     }
   }
 
-  public async get(guildID: Snowflake): Promise<FuckYou<ITag>> {
+  public async get(guildID: Snowflake, tag: string): Promise<FuckYou<ITag>> {
     try {
-      return await Tag.findOne({ guildID });
+      return await Tag.findOne({ guildID, tag });
+    } catch (err: unknown) {
+      this.handleError(err);
+    }
+  }
+
+  public async delete(guildID: Snowflake, tag: string): Promise<void> {
+    try {
+      await Tag.deleteOne({ guildID, tag });
     } catch (err: unknown) {
       this.handleError(err);
     }
