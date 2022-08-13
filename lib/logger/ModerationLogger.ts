@@ -260,6 +260,10 @@ export class ModerationLogger {
    */
   private async log(guildID: Snowflake, options: IModerationLoggerLogOptions, cfg?: IModerationLoggerConfig): Promise<void> {
     try {
+      if(this.verbose) {
+        console.log(`log: ${guildID}`, options);
+      }
+
       //? Never log if there is no embed, could crash the bot as there is very rarely any extra content sent
       if(options.embeds) {
         const { embeds, files, pingModRole } = options;
@@ -1032,30 +1036,26 @@ export class ModerationLogger {
         .setFooter({ text: 'Potentially malicious files are listed below in embeds if present' })
 
       if(hasAttachments) {
-        const firstAttachment = message.attachments.first();
-        const firstIsSafe = discordSupportedMedias.includes(firstAttachment.name.split('.')[1].toLowerCase());
-
-        if(firstIsSafe) {
-          messageObject.files.push(firstAttachment);
-          message.attachments.delete(firstAttachment.id);
-
-          firstEmbed.setImage(`attachment://${firstAttachment.name}`);
-          firstEmbedHasAttachment = true
-        }
-
         for(const [ attachmentID, attachment ] of message.attachments) {
           const splitName = attachment.name.split('.');
-          const extension = splitName.pop();
+          const extension = splitName.pop().toLowerCase();
           const name = splitName.join('.');
 
           const isSupportedMedia = discordSupportedMedias.includes(extension);
 
           if(isSupportedMedia) {
-            messageObject.embeds.push(
-              new LogEmbed(3)
-                .setImage(`attachment://${attachment.name}`)
-                .setAuthor({ name: `${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
-            )
+            messageObject.files.push(attachment);
+
+            if(!firstEmbedHasAttachment) {
+              firstEmbed.setImage(`attachment://${attachment.name}`);
+              firstEmbedHasAttachment = true;
+            } else {
+              messageObject.embeds.push(
+                new LogEmbed(3)
+                  .setImage(`attachment://${attachment.name}`)
+                  .setAuthor({ name: `${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
+              )
+            }
           } else {
             messageObject.embeds.push(
               new LogEmbed(3)

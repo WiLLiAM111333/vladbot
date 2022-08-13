@@ -8,8 +8,6 @@ export namespace Constants {
     'jpg',
     'jpeg',
     'png',
-    'mp4',
-    'mp3',
     'webp',
     'mov',
     "webm",
