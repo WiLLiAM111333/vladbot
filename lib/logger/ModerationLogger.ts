@@ -950,7 +950,7 @@ export class ModerationLogger {
       const isGhostPing = this.isGhostPing(message);
       const isMessageReply = !!message.mentions.repliedUser && !message.mentions.repliedUser.bot
 
-      if(isGhostPing) {
+      if(isGhostPing && !isMessageReply) {
         embed.setDescription(stripIndent(`
           ${bold('Potential Ghost Ping')}
           ${bold('Time Between')}: ${inlineCodeBlock(timeDiff)} minutes
