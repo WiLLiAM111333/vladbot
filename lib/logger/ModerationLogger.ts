@@ -163,6 +163,7 @@ export class ModerationLogger {
    * @returns {IModerationLoggerConfig}
    */
   private getCachedCFG(guildID: Snowflake): IModerationLoggerConfig {
+    console.log(this.cachedCFGs);
     return this.cachedCFGs.get(guildID)
   }
 
@@ -198,6 +199,10 @@ export class ModerationLogger {
   private getLastAuditLogID(guildID: Snowflake): Snowflake {
     const log = this.auditLogs.get(guildID);
 
+    if(this.verbose) {
+      console.log(this.auditLogs);
+    }
+
     this.auditLogs.delete(guildID);
 
     return log;
@@ -205,6 +210,8 @@ export class ModerationLogger {
 
   /**
    * @description Finds an audit log based on the given AuditLogEvent
+   * @private
+   * @async
    * @param {Guild} guild
    * @param {AuditLogEvent} type
    * @returns {}
@@ -935,7 +942,7 @@ export class ModerationLogger {
 
     try {
       const cfg = await this.configManager.get(guildID);
-      this.cachedCFGs.set(guildID, cfg);
+      this.cacheCFG(cfg);
 
       // Avoid the new voice channel text chats (i think)
       if((cfg && message.channel.id === cfg.logChannelID) || !(message.channel instanceof TextChannel) || cfg.ignoredChannelIDs.includes(message.channelId) || !message.guild) return;
@@ -965,7 +972,7 @@ export class ModerationLogger {
             .setDescription(stripIndent(`
               ${bold('Potential Ghost Ping')}
               ${bold('Time Between')}: ${inlineCodeBlock(timeDiff)} minutes
-              ${bold('Mentioned User')}: ${inlineCodeBlock(userMention(message.mentions.repliedUser.id))}
+              ${bold('Mentioned User')}: ${userMention(message.mentions.repliedUser.id)}
               ${bold('Channel')}: ${inlineCodeBlock(message.channel.name)}
               ${bold('Content')}:
               ${message.content ?? 'NO_CONTENT'}

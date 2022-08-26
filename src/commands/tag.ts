@@ -23,7 +23,6 @@ export default class extends Command {
 
   public async run(client: VladimirClient, message: Message, args: Array<string>): Promise<unknown> {
     const guildID = message.guildId; // mad?
-
     const query = args.shift();
 
     try {
@@ -151,7 +150,7 @@ export default class extends Command {
             .setColor('#0000ff')
             .setDescription(stripIndent(`
               ${bold('Tag')}: ${inlineCodeBlock(query)}
-              ${dbTag.text}
+              ${codeBlock(dbTag.text)}
             `));
 
           message.channel.send({ embeds: [ embed ] });

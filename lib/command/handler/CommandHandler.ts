@@ -16,7 +16,7 @@ export class CommandHandler {
 
   public constructor(client: VladimirClient) {
     this.client = client;
-    this.prefix = '.,.';
+    this.prefix = '~';
 
     this.commands = new Map();
 
