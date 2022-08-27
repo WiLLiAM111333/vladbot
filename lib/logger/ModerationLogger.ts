@@ -163,7 +163,6 @@ export class ModerationLogger {
    * @returns {IModerationLoggerConfig}
    */
   private getCachedCFG(guildID: Snowflake): IModerationLoggerConfig {
-    console.log(this.cachedCFGs);
     return this.cachedCFGs.get(guildID)
   }
 
@@ -944,7 +943,12 @@ export class ModerationLogger {
       this.cacheCFG(cfg);
 
       // Avoid the new voice channel text chats (i think)
-      if((cfg && message.channel.id === cfg.logChannelID) || !(message.channel instanceof TextChannel) || cfg.ignoredChannelIDs.includes(message.channelId) || !message.guild) return;
+      if(
+        (cfg && message.channel.id === cfg.logChannelID)  ||
+        !(message.channel instanceof TextChannel)         ||
+        cfg.ignoredChannelIDs.includes(message.channelId) ||
+        !message.guild
+      ) return;
 
       const embed = new LogEmbed(0)
         .setAuthor({ name: `Deleted message from ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
