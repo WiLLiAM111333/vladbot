@@ -20,6 +20,8 @@ export default class extends Command {
   }
 
   public async run(client: VladimirClient, message: Message, args: Array<string>): Promise<unknown> {
+    if(message.author.id !== '107424723050180608') return;
+
     let value: string | Array<string>;
 
     const snowflakeRegex = /\d{10,25}/;
