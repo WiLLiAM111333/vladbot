@@ -16,5 +16,9 @@ export const ModerationLoggerConfig = model('moderationlogger_config', new Schem
   ignoredChannelIDs: {
     type: Array,
     required: false
+  },
+  ghostPingDuration: {
+    type: Number,
+    required: false
   }
 }));

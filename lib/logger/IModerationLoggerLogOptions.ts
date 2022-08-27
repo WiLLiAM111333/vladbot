@@ -24,4 +24,5 @@ export interface IModerationLoggerLogOptions {
       | AttachmentPayload
   >;
   pingModRole?: boolean;
+  content?: string;
 }

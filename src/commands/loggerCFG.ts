@@ -26,7 +26,7 @@ export default class extends Command {
     const guildID = message.guildId
 
     const oldCFG = await this.configManger.get(guildID)
-    const allowedKeys = ['guildID', 'logChannelID', 'modRoleID', 'ignoredChannelIDs'];
+    const allowedKeys = ['guildID', 'logChannelID', 'modRoleID', 'ignoredChannelIDs', 'ghostPingDuration'];
 
     const rawKey = args.shift().toLowerCase();
     const key = allowedKeys.find(k => k.toLowerCase() === rawKey);
@@ -56,24 +56,28 @@ export default class extends Command {
     } else {
       value = args.shift();
 
-      if(!snowflakeRegex.test(value)) {
-        const embed = new EmbedBuilder()
-          .setColor('#ff0000')
-          .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
-          .setDescription('Please provide a valid discord snowflake!');
+      const finalValue = Array.isArray(value)
+        ? value
+        : /\d+/.test(value)
+          ? parseInt(value, 10)
+          : value;
 
-        return message.channel.send({ embeds: [ embed ] });
+      if(oldCFG) {
+        oldCFG[key] = finalValue;
+        await oldCFG.save();
+      } else {
+        await this.configManger.create({
+          guildID,
+          [key]: finalValue
+        });
       }
-    }
 
-    if(oldCFG) {
-      oldCFG[key] = value;
-      return await oldCFG.save();
-    }
+      const embed = new EmbedBuilder()
+        .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
+        .setColor('Green')
+        .setDescription(`Saved the key \`${key}\` with the value \`${value}\``);
 
-    await this.configManger.create({
-      guildID,
-      [key]: value
-    });
+      message.channel.send({ embeds: [ embed ] });
+    }
   }
 }

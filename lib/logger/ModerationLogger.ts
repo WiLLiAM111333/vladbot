@@ -214,7 +214,7 @@ export class ModerationLogger {
    * @async
    * @param {Guild} guild
    * @param {AuditLogEvent} type
-   * @returns {}
+   * @returns {Promise<GuildAuditLogsEntry<TAction>>}
    */
   private async findAuditLog<TAction extends AuditLogEvent>(guild: Guild, type: TAction): Promise<GuildAuditLogsEntry<TAction>> {
     const guildID = guild.id;
@@ -273,7 +273,7 @@ export class ModerationLogger {
 
       //? Never log if there is no embed, could crash the bot as there is very rarely any extra content sent
       if(options.embeds) {
-        const { embeds, files, pingModRole } = options;
+        const { embeds, files, pingModRole, content } = options;
         const hook = await this.getWebHook(guildID);
 
         if(!hook) {
@@ -294,7 +294,7 @@ export class ModerationLogger {
             content: roleMention(modRoleID)
           });
         } else {
-          hook.send({ embeds, files });
+          hook.send({ embeds, files, content });
         }
       }
     } catch (err) {
@@ -772,7 +772,6 @@ export class ModerationLogger {
       const [ oldMentionable, newMentionable ] = [oldRole.mentionable, newRole.mentionable]
         .map(mentionable => this.convertBoolToStr(mentionable));
 
-
       if(oldName !== newName) {
         diff[count++] = `Changed name from ${bold(oldName)} to ${bold(newName)}`;
       }
@@ -952,15 +951,19 @@ export class ModerationLogger {
         .setDescription(`${bold('Channel')}: ${inlineCodeBlock(message.channel.name)}`)
 
       const currUTCTime = new Date(Date.now());
-      const timeDiff = (((currUTCTime.getTime() - message.createdAt.getTime()) / 1000) / 60).toFixed(2);
+
+      const ghostPinghreshold = cfg.ghostPingDuration / 60;
+      const timeDiff = ((currUTCTime.getTime() - message.createdAt.getTime()) / 1000) / 60
+      const formattedTimeDiff = timeDiff.toFixed(2);
 
       const isGhostPing = this.isGhostPing(message);
       const isMessageReply = !!message.mentions.repliedUser && !message.mentions.repliedUser.bot
+      const shouldMentionModRole = (timeDiff <= ghostPinghreshold) && (isGhostPing || isMessageReply)
 
       if(isGhostPing && !isMessageReply) {
         embed.setDescription(stripIndent(`
           ${bold('Potential Ghost Ping')}
-          ${bold('Time Between')}: ${inlineCodeBlock(timeDiff)} minutes
+          ${bold('Time Between')}: ${inlineCodeBlock(formattedTimeDiff)} minutes
           ${bold('Channel')}: ${inlineCodeBlock(message.channel.name)}
           ${bold('Content')}:
           ${message.content ?? 'NO_CONTENT'}
@@ -971,23 +974,26 @@ export class ModerationLogger {
             .setFooter({ text: 'This mention was a message reply' })
             .setDescription(stripIndent(`
               ${bold('Potential Ghost Ping')}
-              ${bold('Time Between')}: ${inlineCodeBlock(timeDiff)} minutes
+              ${bold('Time Between')}: ${inlineCodeBlock(formattedTimeDiff)} minutes
               ${bold('Mentioned User')}: ${userMention(message.mentions.repliedUser.id)}
               ${bold('Channel')}: ${inlineCodeBlock(message.channel.name)}
               ${bold('Content')}:
               ${message.content ?? 'NO_CONTENT'}
             `));
         } else {
-          embed
-            .setDescription(stripIndent(`
-              ${bold('Channel')}: ${inlineCodeBlock(message.channel.name)}
-              ${bold('Content')}:
-              ${message.content ?? 'NO_CONTENT'}
-            `));
+          embed.setDescription(stripIndent(`
+            ${bold('Channel')}: ${inlineCodeBlock(message.channel.name)}
+            ${bold('Content')}:
+            ${message.content ?? 'NO_CONTENT'}
+          `));
         }
       }
 
-      this.log(guildID, { embeds: [ embed ], pingModRole: isGhostPing || isMessageReply }, cfg);
+      if(shouldMentionModRole) {
+        this.log(guildID, { embeds: [ embed ], pingModRole: true }, cfg);
+      } else {
+        this.log(guildID, { embeds: [ embed ], pingModRole: false, content: '(ghostping)' })
+      }
     } catch(err) {
       this.handleError(err);
     }
@@ -1091,7 +1097,7 @@ export class ModerationLogger {
               name: 'Reason for missing media:',
               value: 'Can not display tenor URLs on embeds',
               inline: false
-            })
+            });
           }
         }
 
