@@ -1,14 +1,14 @@
-import stripIndent from 'strip-indent';
-import { Constants } from '../../src/utils/constants';
-import { Util } from '../../src/utils';
-import { VladimirClient } from '../VladimirClient';
-import { LogEmbed } from './LogEmbed';
-import { ResolvedChannelTypeUnion } from './ResolvedChannelTypeUnion';
+import stripIndent                       from 'strip-indent';
+import { Constants                     } from '../../src/utils/constants';
+import { Util                          } from '../../src/utils';
+import { VladimirClient                } from '../VladimirClient';
+import { LogEmbed                      } from './LogEmbed';
+import { ResolvedChannelTypeUnion      } from './ResolvedChannelTypeUnion';
 import { ModerationLoggerConfigManager } from './config/ModerationLoggerConfigManager';
-import { DiscordFormatter } from '../formatter/DiscordFormatter';
-import { ByteConverter } from '../converter/ByteConverter';
-import { IModerationLoggerLogOptions } from './IModerationLoggerLogOptions';
-import { IModerationLoggerConfig } from './config/IModerationLoggerConfig';
+import { DiscordFormatter              } from '../formatter/DiscordFormatter';
+import { ByteConverter                 } from '../converter/ByteConverter';
+import { IModerationLoggerLogOptions   } from './IModerationLoggerLogOptions';
+import { IModerationLoggerConfig       } from './config/IModerationLoggerConfig';
 import {
   Snowflake,
   GuildChannel,
@@ -33,9 +33,14 @@ import {
   Guild
 } from 'discord.js';
 
-const { discordSupportedMedias, MEDIA_SUFFIX_REGEX, URL_REGEX, TENOR_REGEX } = Constants;
 const { bold, cursive, inlineCodeBlock, codeBlock } = DiscordFormatter;
 const { getCombinedStringArrayLength, isProduction } = Util;
+const {
+  discordSupportedMedias,
+  MEDIA_SUFFIX_REGEX,
+  URL_REGEX,
+  TENOR_REGEX
+} = Constants;
 
 /**
  * Handles logging throughout guilds
@@ -996,7 +1001,7 @@ export class ModerationLogger {
       if(shouldMentionModRole) {
         this.log(guildID, { embeds: [ embed ], pingModRole: true }, cfg);
       } else {
-        this.log(guildID, { embeds: [ embed ], pingModRole: false, content: '(ghostping)' })
+        this.log(guildID, { embeds: [ embed ], pingModRole: false, content: (isGhostPing || isMessageReply) ? '(ghostping)' : '' })
       }
     } catch(err) {
       this.handleError(err);
