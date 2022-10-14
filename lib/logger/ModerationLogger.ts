@@ -33,7 +33,7 @@ import {
   Guild
 } from 'discord.js';
 
-const { bold, cursive, inlineCodeBlock, codeBlock } = DiscordFormatter;
+const { bold, cursive, inlineCodeBlock } = DiscordFormatter;
 const { getCombinedStringArrayLength, isProduction } = Util;
 const {
   discordSupportedMedias,
@@ -659,6 +659,10 @@ export class ModerationLogger {
       const { user, reason, guild } = ban;
       const guildID = guild.id;
 
+      // Fetch MemberBanAdd from auditlog and search for the current user being unbanned to fetch reason.
+      const banAddLogs = await guild.fetchAuditLogs({ type: AuditLogEvent.MemberBanAdd })
+      const banAddLog = banAddLogs.entries.find(log => log.target.id === user.id);
+
       const auditLogEntry = await this.findAuditLog(guild, AuditLogEvent.MemberBanRemove);
 
       const tag = this.getTagFromAuditLog(auditLogEntry);
@@ -666,7 +670,7 @@ export class ModerationLogger {
 
       const embed = new LogEmbed(2)
         .setAuthor({ name: authorStr, iconURL: this.getAvatarFromAuditLog(auditLogEntry) })
-        .setDescription(`They were originally banned for the following reason:\n${bold(`"${reason ?? auditLogEntry?.reason ?? 'No Reason Set'}"`)}`);
+        .setDescription(`They were originally banned for the following reason:\n${bold(`"${reason ?? auditLogEntry?.reason ?? banAddLog.reason ?? 'No Reason Set'}"`)}`);
 
       this.log(guildID, { embeds: [ embed ] });
       this.assignAuditLogEntry(guildID, auditLogEntry);
@@ -1164,7 +1168,7 @@ export class ModerationLogger {
       if(auditLogEntry?.target?.id === member.user.id) {
         const embed = new LogEmbed(2)
           .setAuthor({ name: `${member.user.tag} was just kicked by ${auditLogEntry.executor.tag}` })
-          .setDescription(`${bold('Reason')}\n${codeBlock(auditLogEntry.reason || 'NO_REASON')}`)
+          .setDescription(`${bold('Reason')}\n${bold(auditLogEntry.reason || 'NO_REASON')}`)
           .setFooter({ text: 'Sometimes the user kicking is inaccurate as there is no new audit log entry' });
 
         this.log(guildID, { embeds: [ embed ] });
