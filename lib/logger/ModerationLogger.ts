@@ -639,6 +639,7 @@ export class ModerationLogger {
 
       const embed = new LogEmbed(2)
         .setAuthor({ name: authorStr })
+        .setDescription(`${bold('UserID')}: ${inlineCodeBlock(user.id)}`);
 
       this.log(guildID, { embeds: [ embed ] });
       this.assignAuditLogEntry(guildID, auditLogEntry);
@@ -670,7 +671,12 @@ export class ModerationLogger {
 
       const embed = new LogEmbed(2)
         .setAuthor({ name: authorStr, iconURL: this.getAvatarFromAuditLog(auditLogEntry) })
-        .setDescription(`They were originally banned for the following reason:\n${bold(`"${reason ?? auditLogEntry?.reason ?? banAddLog.reason ?? 'No Reason Set'}"`)}`);
+        .setDescription(stripIndent(`
+          ${bold('UserID')}: ${inlineCodeBlock(user.id)}
+
+          They were originally banned for the following reason:
+          ${bold(`"${reason ?? auditLogEntry?.reason ?? banAddLog?.reason ?? 'No Reason Set'}"`)}
+        `));
 
       this.log(guildID, { embeds: [ embed ] });
       this.assignAuditLogEntry(guildID, auditLogEntry);
