@@ -30,8 +30,11 @@ import {
   roleMention,
   channelMention,
   userMention,
-  Guild
+  Guild,
+  User,
+  EmbedBuilder
 } from 'discord.js';
+import { IStrike } from '../strike/IStrike';
 
 const { bold, cursive, inlineCodeBlock } = DiscordFormatter;
 const { getCombinedStringArrayLength, isProduction } = Util;
@@ -331,6 +334,50 @@ export class ModerationLogger {
       return hook ?? await channel.createWebhook({ name: 'Vladimir Bot Logger' });
     } catch (err) {
       this.handleError(err);
+    }
+  }
+
+  private async notifyMember(member: GuildMember, count: number, reason: string) {
+    try {
+      await this.notifyMemberInDMs(member, count, reason);
+    } catch (err) {
+      if(err.code === 50007) {
+        await this.notifyMemberInBotChannel(member, count, reason);
+      }
+    }
+  }
+
+  private getNotificationEmbed(member: GuildMember, count: number, reason: string): EmbedBuilder {
+    return new EmbedBuilder()
+      .setColor('#ff0000')
+      .setAuthor({ name: member.user.tag, iconURL: member.user.displayAvatarURL() })
+      .setDescription(stripIndent(`
+        You have been striked in ${bold(member.guild.name)}
+        This is strike number ${bold(count)}. After ${bold('3')} strikes you will be eligable for punishment. This is the reason for your strike:
+        ${bold(reason)}`
+      ));
+  }
+
+  private async notifyMemberInDMs(member: GuildMember, count: number, reason: string): Promise<void> {
+    try {
+      const dmChannel = await member.createDM();
+      await dmChannel.send({ embeds: [ this.getNotificationEmbed(member, count, reason) ] });
+    } catch (err) {
+      throw err
+    }
+  }
+
+  private async notifyMemberInBotChannel(member: GuildMember, count: number, reason: string): Promise<void> {
+    const cfg = await this.configManager.get(member.guild.id);
+
+    if(cfg?.botSpamChannelID) {
+      const channel = await member.guild.channels.fetch(cfg.botSpamChannelID) as TextChannel;
+
+      channel.send({
+        content: member.toString(),
+        allowedMentions: { users: [member.id] },
+        embeds: [ this.getNotificationEmbed(member, count, reason) ]
+      });
     }
   }
 
@@ -1180,6 +1227,32 @@ export class ModerationLogger {
         this.log(guildID, { embeds: [ embed ] });
         this.assignAuditLogEntry(guildID, auditLogEntry);
       }
+    } catch (err) {
+      this.handleError(err);
+    }
+  }
+
+  public async handleStrikeAdd(guild: Guild, moderator: User, target: GuildMember, strike: IStrike, count: number): Promise<void> {
+    const { reason } = strike;
+
+    try {
+      const formattedDate = new Date(strike.expireDate)
+        .toISOString()
+        .replace(/T/, ' ')
+        .replace(/\.\d+Z/, '');
+
+      const embed = new LogEmbed(2)
+        .setAuthor({ name: `"${target.user.tag}" was just striked`, iconURL: target.displayAvatarURL() })
+        .setDescription(stripIndent(`
+          ${bold('UserID')}: ${inlineCodeBlock(target.id)}
+          ${bold('Moderator')}: ${inlineCodeBlock(moderator.tag)}
+          ${bold('Amount of Strikes')}: ${inlineCodeBlock(count)}
+          ${bold('Reason')}: ${inlineCodeBlock(reason)}
+          ${bold('Expire Date (ISO Time Format)')}: ${inlineCodeBlock(formattedDate)}
+        `));
+
+      this.log(guild.id, { embeds: [ embed ] });
+      this.notifyMember(target, count, reason);
     } catch (err) {
       this.handleError(err);
     }

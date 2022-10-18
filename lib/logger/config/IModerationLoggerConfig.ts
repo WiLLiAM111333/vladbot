@@ -6,4 +6,5 @@ export interface IModerationLoggerConfig {
   modRoleID: Snowflake;
   ignoredChannelIDs: Array<Snowflake>;
   ghostPingDuration: number;
+  botSpamChannelID: Snowflake;
 }

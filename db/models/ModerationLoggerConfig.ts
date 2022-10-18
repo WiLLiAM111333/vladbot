@@ -20,5 +20,9 @@ export const ModerationLoggerConfig = model('moderationlogger_config', new Schem
   ghostPingDuration: {
     type: Number,
     required: false
+  },
+  botSpamChannelID: {
+    type: String,
+    required: true
   }
 }));

@@ -28,7 +28,14 @@ export default class extends Command {
     const guildID = message.guildId
 
     const oldCFG = await this.configManger.get(guildID)
-    const allowedKeys = ['guildID', 'logChannelID', 'modRoleID', 'ignoredChannelIDs', 'ghostPingDuration'];
+    const allowedKeys = [
+      'guildID',
+      'logChannelID',
+      'modRoleID',
+      'ignoredChannelIDs',
+      'ghostPingDuration',
+      'botSpamChannelID'
+    ];
 
     const rawKey = args.shift().toLowerCase();
     const key = allowedKeys.find(k => k.toLowerCase() === rawKey);
