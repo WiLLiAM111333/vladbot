@@ -13,7 +13,7 @@ export default class extends Command {
     super({
       name: 'strike',
       description: 'Strikes a member for a given reason',
-      category: 'config',
+      category: 'moderation',
       args: [['User', 'Mention or userID to select which user gets striked'], ['Reason', 'The rest of the arguments, spaces are allowed']],
       aliases: [],
       userPerms: ['BanMembers']
