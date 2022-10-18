@@ -34,7 +34,7 @@ export class CommandHandler {
 
   private missingPermissionsEmbed(member: GuildMember, neededPerms: Array<PermissionsString>): EmbedBuilder {
     const missing = member.permissions.missing(neededPerms)
-      .map(perm => `${perm},`).join('\n');
+      .map((perm, i) => `${perm}${i < neededPerms.length - 1 ? ',' : ''}`).join('\n');
 
     const embed = new EmbedBuilder()
       .setDescription(`\`${missing}\``)
@@ -54,7 +54,7 @@ export class CommandHandler {
       if(!executor.permissions.has(userPerms)) {
         message.channel.send({ embeds: [ this.missingPermissionsEmbed(executor, userPerms) ] });
 
-        reject({
+        resolve({
           success: false,
           reason: `User missing permissions`
         });
@@ -63,7 +63,7 @@ export class CommandHandler {
       if(!clientMember.permissions.has(clientPerms)) {
         message.channel.send({ embeds: [ this.missingPermissionsEmbed(clientMember, clientPerms) ] });
 
-        reject({
+        resolve({
           success: false,
           reason: 'Client missing permissions'
         });
@@ -82,9 +82,12 @@ export class CommandHandler {
   public execute(command: string, message: Message, args: Array<string>): void {
     const cmd = this.commands.get(command);
 
-    if(this.validate(cmd, message)) {
-      cmd.run(this.client, message, args);
-    }
+    this.validate(cmd, message)
+      .then(({ success }) => {
+        if(success) {
+          cmd.run(this.client, message, args);
+        }
+      }).catch(() => {});
   }
 
   public help(command: string, message: Message, mention?: boolean): void {
