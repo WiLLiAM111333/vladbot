@@ -1,20 +1,21 @@
+import stripIndent from "strip-indent";
 import { EmbedBuilder, Message } from "discord.js";
 import { Command } from "../../lib/command/Command";
 import { DiscordFormatter } from "../../lib/formatter/DiscordFormatter";
 import { StrikeManager } from "../../lib/strike/StrikeManager";
 import { VladimirClient } from "../../lib/VladimirClient";
 
-const { bold } = DiscordFormatter;
+const { bold, inlineCodeBlock } = DiscordFormatter;
 
 export default class extends Command {
   private strikeManager: StrikeManager;
 
   public constructor() {
     super({
-      name: 'strike',
-      description: 'Strikes a member for a given reason',
-      category: 'config',
-      args: [['User', 'Mention or userID to select which user gets striked'], ['Reason', 'The rest of the arguments, spaces are allowed']],
+      name: 'record',
+      description: 'Sends the record of a users strikes',
+      category: 'moderation',
+      args: [['User', 'Mention or userID to select which users record to get']],
       aliases: [],
       userPerms: ['BanMembers']
     });
@@ -37,26 +38,29 @@ export default class extends Command {
     }
 
     try {
-      const reason = args.slice(1).join(' ') ?? 'No reason set';
       const userID = member.user.id;
       const guildID = message.guildId;
 
-      const strike = await this.strikeManager.addStrike({ userID, reason, guildID });
       const allStrikes = await this.strikeManager.getAll({ userID, guildID });
 
+      const str = allStrikes.length
+        ? allStrikes.reduce((_str, strike, index) => {
+            return _str += stripIndent(`
+              ${bold(`${index + 1}.`)}
+              ${bold('Expire Date (ISO Time Format)')}: ${inlineCodeBlock(strike.expireDate)}
+              ${bold('Reason')}:
+                "${bold(strike.reason)}"
+              ---
+            `)
+          }, '')
+        : 'This user has no strikes on record'
+
       const embed = new EmbedBuilder()
-        .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
-        .setDescription(`Saved strike number ${allStrikes.length} for the reason\n${bold(reason)}`)
+        .setAuthor({ name: member.user.tag, iconURL: member.user.displayAvatarURL() })
+        .setDescription(str.trim())
         .setColor('#37ff05');
 
       message.channel.send({ embeds: [ embed ] });
-      client.moderationLogger.handleStrikeAdd(message.guild, message.author, member, strike, allStrikes.length);
-
-      for(const toProcess of allStrikes) {
-        if(this.strikeManager.strikeIsExpired(toProcess)) {
-          this.strikeManager.delete(toProcess);
-        }
-      }
     } catch (err) {
       throw err;
     }
