@@ -44,7 +44,7 @@ export class CommandHandler {
     return embed;
   }
 
-  public validate(command: Command, message: Message): Promise<{ success: boolean, reason?: string }> {
+  public validate(command: Command, message: Message): Promise<boolean> {
     return new Promise((resolve, reject) => {
       const { member: executor, guild } = message;
       const clientMember = guild.members.me;
@@ -53,21 +53,15 @@ export class CommandHandler {
 
       if(!executor.permissions.has(userPerms)) {
         message.channel.send({ embeds: [ this.missingPermissionsEmbed(executor, userPerms) ] });
-
-        resolve({
-          success: false,
-          reason: `User missing permissions`
-        });
+        reject();
       }
 
       if(!clientMember.permissions.has(clientPerms)) {
         message.channel.send({ embeds: [ this.missingPermissionsEmbed(clientMember, clientPerms) ] });
-
-        resolve({
-          success: false,
-          reason: 'Client missing permissions'
-        });
+        reject();
       }
+
+      resolve(true);
     });
   }
 
@@ -83,7 +77,8 @@ export class CommandHandler {
     const cmd = this.commands.get(command);
 
     this.validate(cmd, message)
-      .then(({ success }) => {
+      .then(success => {
+        console.log(success);
         if(success) {
           cmd.run(this.client, message, args);
         }
