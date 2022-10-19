@@ -78,7 +78,6 @@ export class CommandHandler {
 
     this.validate(cmd, message)
       .then(success => {
-        console.log(success);
         if(success) {
           cmd.run(this.client, message, args);
         }
